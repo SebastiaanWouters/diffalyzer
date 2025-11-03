@@ -1,5 +1,27 @@
+# Dependencies
 /vendor/
+
+# Build artifacts
 /composer.lock
+
+# Test coverage
+/coverage/
 /.phpunit.cache
+/.phpunit.result.cache
+
+# IDE
+/.idea/
+/.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Code quality tools
 /.php-cs-fixer.cache
-/.psalm
+/.psalm/
+/phpstan.neon
+/.phpcs-cache

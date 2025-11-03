@@ -1,0 +1,87 @@
+# Example GitLab CI configuration using Diffalyzer
+
+stages:
+  - test
+  - analyze
+
+variables:
+  # Fetch full git history for diff comparison
+  GIT_DEPTH: 0
+
+test:
+  stage: test
+  image: php:8.1-cli
+  before_script:
+    - apt-get update && apt-get install -y git zip unzip
+    - curl -sS https://getcomposer.org/installer | php
+    - php composer.phar install --no-progress
+  script:
+    - |
+      # Determine base branch for comparison
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        BASE_BRANCH="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      else
+        BASE_BRANCH="HEAD~1"
+      fi
+
+      # Get affected test files
+      TESTS=$(vendor/bin/diffalyzer --output test --from $BASE_BRANCH)
+
+      # Run tests
+      if [ -n "$TESTS" ]; then
+        echo "Running affected tests: $TESTS"
+        vendor/bin/phpunit $TESTS
+      else
+        echo "Running all tests"
+        vendor/bin/phpunit
+      fi
+
+psalm:
+  stage: analyze
+  image: php:8.1-cli
+  before_script:
+    - apt-get update && apt-get install -y git zip unzip
+    - curl -sS https://getcomposer.org/installer | php
+    - php composer.phar install --no-progress
+  script:
+    - |
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        BASE_BRANCH="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      else
+        BASE_BRANCH="HEAD~1"
+      fi
+
+      FILES=$(vendor/bin/diffalyzer --output files --from $BASE_BRANCH)
+
+      if [ -n "$FILES" ]; then
+        echo "Analyzing affected files: $FILES"
+        vendor/bin/psalm $FILES
+      else
+        echo "Analyzing all files"
+        vendor/bin/psalm
+      fi
+
+code-style:
+  stage: analyze
+  image: php:8.1-cli
+  before_script:
+    - apt-get update && apt-get install -y git zip unzip
+    - curl -sS https://getcomposer.org/installer | php
+    - php composer.phar install --no-progress
+  script:
+    - |
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        BASE_BRANCH="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      else
+        BASE_BRANCH="HEAD~1"
+      fi
+
+      FILES=$(vendor/bin/diffalyzer --output files --from $BASE_BRANCH)
+
+      if [ -n "$FILES" ]; then
+        echo "Checking affected files: $FILES"
+        vendor/bin/ecs check $FILES
+      else
+        echo "Checking all files"
+        vendor/bin/ecs check
+      fi

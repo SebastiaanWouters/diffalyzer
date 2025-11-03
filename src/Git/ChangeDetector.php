@@ -19,6 +19,15 @@ final class ChangeDetector
         ?string $to = null,
         bool $staged = false
     ): array {
+        $allFiles = $this->getAllChangedFiles($from, $to, $staged);
+        return array_filter($allFiles, fn(string $file): bool => str_ends_with($file, '.php'));
+    }
+
+    public function getAllChangedFiles(
+        ?string $from = null,
+        ?string $to = null,
+        bool $staged = false
+    ): array {
         $command = $this->buildGitCommand($from, $to, $staged);
         $process = new Process($command, $this->projectRoot);
         $process->run();
@@ -32,9 +41,7 @@ final class ChangeDetector
             return [];
         }
 
-        $files = explode("\n", $output);
-
-        return array_filter($files, fn(string $file): bool => str_ends_with($file, '.php'));
+        return explode("\n", $output);
     }
 
     private function buildGitCommand(?string $from, ?string $to, bool $staged): array

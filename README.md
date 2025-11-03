@@ -1,5 +1,10 @@
 # Diffalyzer
 
+[![Latest Stable Version](https://poser.pugx.org/sebastiaanwouters/diffalyzer/v)](https://packagist.org/packages/sebastiaanwouters/diffalyzer)
+[![Total Downloads](https://poser.pugx.org/sebastiaanwouters/diffalyzer/downloads)](https://packagist.org/packages/sebastiaanwouters/diffalyzer)
+[![License](https://poser.pugx.org/sebastiaanwouters/diffalyzer/license)](https://packagist.org/packages/sebastiaanwouters/diffalyzer)
+[![PHP Version](https://img.shields.io/badge/PHP-8.1%20|%208.2%20|%208.3%20|%208.4-blue)](https://packagist.org/packages/sebastiaanwouters/diffalyzer)
+
 A PHP CLI tool that analyzes git changes and outputs affected PHP file paths in formats compatible with PHPUnit, Psalm, ECS, and PHP-CS-Fixer. This enables optimized test and analysis runs by only processing files that are actually affected by changes.
 
 ## Features
@@ -13,16 +18,32 @@ A PHP CLI tool that analyzes git changes and outputs affected PHP file paths in 
 
 ## Installation
 
+### Via Composer (Recommended)
+
 ```bash
-composer require diffalyzer/diffalyzer
+composer require --dev sebastiaanwouters/diffalyzer
 ```
 
-Or for development:
+After installation, the binary will be available at `vendor/bin/diffalyzer`.
+
+### From Source
 
 ```bash
-git clone https://github.com/yourusername/diffalyzer.git
+git clone https://github.com/sebastiaanwouters/diffalyzer.git
 cd diffalyzer
 composer install
+```
+
+## Quick Start
+
+```bash
+# Run only tests affected by your changes
+vendor/bin/phpunit $(vendor/bin/diffalyzer --output test)
+
+# Analyze only affected files with Psalm, ECS, or PHP-CS-Fixer
+vendor/bin/psalm $(vendor/bin/diffalyzer --output files)
+vendor/bin/ecs check $(vendor/bin/diffalyzer --output files)
+vendor/bin/php-cs-fixer fix $(vendor/bin/diffalyzer --output files)
 ```
 
 ## Usage
@@ -30,56 +51,50 @@ composer install
 ### Basic Usage
 
 ```bash
-# Analyze uncommitted changes for PHPUnit
-php bin/diffalyzer --output phpunit
+# Get test files affected by uncommitted changes
+vendor/bin/diffalyzer --output test
 
-# Analyze for Psalm
-php bin/diffalyzer --output psalm
-
-# Analyze for ECS
-php bin/diffalyzer --output ecs
-
-# Analyze for PHP-CS-Fixer
-php bin/diffalyzer --output cs-fixer
+# Get all affected files (for Psalm, ECS, PHP-CS-Fixer, etc.)
+vendor/bin/diffalyzer --output files
 ```
 
 ### With Strategies
 
 ```bash
 # Conservative strategy (default): includes all dependencies
-php bin/diffalyzer --output phpunit --strategy conservative
+vendor/bin/diffalyzer --output test --strategy conservative
 
 # Moderate strategy: excludes dynamic method calls
-php bin/diffalyzer --output phpunit --strategy moderate
+vendor/bin/diffalyzer --output test --strategy moderate
 
 # Minimal strategy: only imports and direct inheritance
-php bin/diffalyzer --output phpunit --strategy minimal
+vendor/bin/diffalyzer --output test --strategy minimal
 ```
 
 ### Git Comparison Options
 
 ```bash
 # Staged files only
-php bin/diffalyzer --output phpunit --staged
+vendor/bin/diffalyzer --output test --staged
 
 # Compare branches
-php bin/diffalyzer --output phpunit --from main --to feature-branch
+vendor/bin/diffalyzer --output test --from main --to feature-branch
 
 # Compare commits
-php bin/diffalyzer --output phpunit --from abc123 --to def456
+vendor/bin/diffalyzer --output test --from abc123 --to def456
 
 # Compare from specific branch to HEAD
-php bin/diffalyzer --output phpunit --from main
+vendor/bin/diffalyzer --output test --from main
 ```
 
 ### Full Scan Pattern
 
 ```bash
 # Trigger full scan if any .yml file changes
-php bin/diffalyzer --output phpunit --full-scan-pattern '/.*\.yml$/'
+vendor/bin/diffalyzer --output test --full-scan-pattern '/.*\.yml$/'
 
-# Trigger full scan for config or composer changes
-php bin/diffalyzer --output phpunit --full-scan-pattern '/(config\/.*\.php|composer\.(json|lock))/'
+# Trigger full scan for config changes
+vendor/bin/diffalyzer --output test --full-scan-pattern '/^config\//'
 ```
 
 ## Integration Examples
@@ -88,47 +103,47 @@ php bin/diffalyzer --output phpunit --full-scan-pattern '/(config\/.*\.php|compo
 
 ```bash
 # Run only affected tests
-vendor/bin/phpunit $(php bin/diffalyzer --output phpunit)
+vendor/bin/phpunit $(vendor/bin/diffalyzer --output test)
 
 # With configuration
-vendor/bin/phpunit -c phpunit.xml $(php bin/diffalyzer --output phpunit)
+vendor/bin/phpunit -c phpunit.xml $(vendor/bin/diffalyzer --output test)
 ```
 
 ### Psalm
 
 ```bash
 # Analyze only affected files
-vendor/bin/psalm $(php bin/diffalyzer --output psalm)
+vendor/bin/psalm $(vendor/bin/diffalyzer --output files)
 
 # With specific error level
-vendor/bin/psalm --show-info=false $(php bin/diffalyzer --output psalm)
+vendor/bin/psalm --show-info=false $(vendor/bin/diffalyzer --output files)
 ```
 
 ### ECS (Easy Coding Standard)
 
 ```bash
 # Check only affected files
-vendor/bin/ecs check $(php bin/diffalyzer --output ecs)
+vendor/bin/ecs check $(vendor/bin/diffalyzer --output files)
 
 # With fix
-vendor/bin/ecs check --fix $(php bin/diffalyzer --output ecs)
+vendor/bin/ecs check --fix $(vendor/bin/diffalyzer --output files)
 ```
 
 ### PHP-CS-Fixer
 
 ```bash
 # Fix only affected files
-vendor/bin/php-cs-fixer fix $(php bin/diffalyzer --output cs-fixer)
+vendor/bin/php-cs-fixer fix $(vendor/bin/diffalyzer --output files)
 
 # Dry run
-vendor/bin/php-cs-fixer fix --dry-run $(php bin/diffalyzer --output cs-fixer)
+vendor/bin/php-cs-fixer fix --dry-run $(vendor/bin/diffalyzer --output files)
 ```
 
 ## Command Line Options
 
 | Option | Short | Description | Default |
 |--------|-------|-------------|---------|
-| `--output` | `-o` | Output format: `phpunit`, `psalm`, `ecs`, `cs-fixer` | Required |
+| `--output` | `-o` | Output format: `test` (test files only) or `files` (all files) | Required |
 | `--strategy` | `-s` | Analysis strategy: `conservative`, `moderate`, `minimal` | `conservative` |
 | `--from` | | Source ref for comparison (branch or commit hash) | |
 | `--to` | | Target ref for comparison (branch or commit hash) | `HEAD` |
@@ -168,7 +183,7 @@ Fastest but may miss some affected files.
 
 ### Partial Scan (Normal Mode)
 
-#### PHPUnit Output
+#### `--output test`
 Outputs **space-separated test file paths** that are affected by the changes.
 
 **How it works:**
@@ -203,9 +218,12 @@ The tool uses AST-based dependency analysis to find ALL test files that import o
 
 Example output: `tests/UserTest.php tests/UserCollectorTest.php tests/Integration/UserFlowTest.php`
 
-#### Other Formats (Psalm/ECS/PHP-CS-Fixer)
-Outputs **space-separated source file paths** (includes both source and test files):
-- Example: `src/Foo/Bar.php src/Baz/Qux.php tests/FooTest.php`
+#### `--output files`
+Outputs **space-separated file paths** for all affected files (includes both source and test files).
+
+Use this for static analysis tools (Psalm), code style checkers (ECS, PHP-CS-Fixer), or any tool that needs to process all affected files.
+
+Example output: `src/Foo/Bar.php src/Baz/Qux.php tests/FooTest.php`
 
 ### Full Scan Mode
 When `--full-scan-pattern` matches or no specific files are needed:
@@ -246,21 +264,103 @@ UserService.php uses UserCollector (affected)
 
 **Step 3: Output by format**
 
-For Psalm/ECS/CS-Fixer (all source files):
+For `--output files` (all source files):
 ```
 src/User.php src/UserCollector.php src/UserService.php
 ```
 
-For PHPUnit (test files only):
+For `--output test` (test files only):
 ```
 tests/UserTest.php tests/UserCollectorTest.php tests/UserServiceTest.php
 ```
 
 **Result**: Run only the 3 tests affected by the User.php change, not all 100+ tests in your suite!
 
+## Advanced Integration
+
+### Makefile
+
+Use the included Makefile for convenient local development:
+
+```bash
+# Run affected tests
+make test-affected
+
+# Run tests for changes from main branch
+make test-branch
+
+# Analyze with Psalm
+make psalm-affected
+
+# Fix code style
+make cs-fix-affected
+make ecs-affected
+
+# See all available targets
+make help
+```
+
+### Pre-commit Hook
+
+Create `.git/hooks/pre-commit`:
+
+```bash
+#!/bin/bash
+
+# Run tests on staged files
+TESTS=$(vendor/bin/diffalyzer --output test --staged)
+
+if [ -n "$TESTS" ]; then
+    echo "Running affected tests..."
+    vendor/bin/phpunit $TESTS
+    if [ $? -ne 0 ]; then
+        echo "Tests failed. Commit aborted."
+        exit 1
+    fi
+fi
+
+exit 0
+```
+
+Make it executable:
+
+```bash
+chmod +x .git/hooks/pre-commit
+```
+
+### Composer Scripts
+
+Add to your `composer.json`:
+
+```json
+{
+    "scripts": {
+        "test:affected": [
+            "@php vendor/bin/phpunit $(vendor/bin/diffalyzer --output test)"
+        ],
+        "psalm:affected": [
+            "@php vendor/bin/psalm $(vendor/bin/diffalyzer --output files)"
+        ],
+        "cs:fix:affected": [
+            "@php vendor/bin/php-cs-fixer fix $(vendor/bin/diffalyzer --output files)"
+        ]
+    }
+}
+```
+
+Then run:
+
+```bash
+composer test:affected
+composer psalm:affected
+composer cs:fix:affected
+```
+
 ## CI/CD Integration
 
 ### GitHub Actions
+
+See `.github/workflows/ci-example.yml` for a complete working example. Basic setup:
 
 ```yaml
 name: Tests
@@ -269,9 +369,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 0  # Full history for git diff
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
@@ -280,22 +380,41 @@ jobs:
         run: composer install
       - name: Run Affected Tests
         run: |
-          TESTS=$(php bin/diffalyzer --output phpunit --from origin/main)
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            TESTS=$(vendor/bin/diffalyzer --output test --from origin/${{ github.base_ref }})
+          else
+            TESTS=$(vendor/bin/diffalyzer --output test)
+          fi
+
           if [ -n "$TESTS" ]; then
+            echo "Running affected tests: $TESTS"
             vendor/bin/phpunit $TESTS
           else
+            echo "Running all tests (full scan triggered)"
             vendor/bin/phpunit
           fi
 ```
 
 ### GitLab CI
 
+See `.gitlab-ci-example.yml` for a complete working example. Basic setup:
+
 ```yaml
+variables:
+  GIT_DEPTH: 0  # Fetch full git history
+
 test:
   script:
     - composer install
-    - TESTS=$(php bin/diffalyzer --output phpunit --from origin/main)
     - |
+      if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
+        BASE_BRANCH="origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME"
+      else
+        BASE_BRANCH="HEAD~1"
+      fi
+
+      TESTS=$(vendor/bin/diffalyzer --output test --from $BASE_BRANCH)
+
       if [ -n "$TESTS" ]; then
         vendor/bin/phpunit $TESTS
       else
@@ -303,11 +422,85 @@ test:
       fi
 ```
 
+## Troubleshooting
+
+### No tests run but I made changes
+
+**Cause**: You changed a file that no tests depend on.
+
+**Solutions**:
+- Ensure your test files import the classes they test
+- Try conservative strategy: `--strategy conservative`
+- Verify your changes are to tracked files (not untracked/ignored)
+- Check dependency chain: does a test import your changed class?
+
+### All tests run when I change one file
+
+**Cause**: Full scan was triggered.
+
+**Solutions**:
+- Check if you modified `composer.json` or `composer.lock`
+- Check if your change matches `--full-scan-pattern`
+- Review changed files: `git status`
+- This is by design for critical files
+
+### Git errors
+
+**Cause**: Not in a git repository or no commits exist.
+
+**Solutions**:
+- Ensure you're in a git repository: `git init`
+- Create an initial commit: `git add . && git commit -m "Initial commit"`
+- Verify git is accessible: `git --version`
+
+### Empty output
+
+This is **normal behavior** and means:
+- **For PHPUnit**: No test files affected OR full scan triggered → run all tests
+- **For other tools**: No files affected OR full scan triggered → analyze all files
+
+Always handle empty output by running the full tool:
+
+```bash
+TESTS=$(vendor/bin/diffalyzer --output test)
+if [ -n "$TESTS" ]; then
+    vendor/bin/phpunit $TESTS
+else
+    vendor/bin/phpunit  # Full run
+fi
+```
+
+## Tips & Best Practices
+
+1. **Use Makefile**: Convenient shortcuts for common operations
+2. **CI/CD Branch Comparison**: Use `--from origin/main` in pipelines
+3. **Start Conservative**: Begin with conservative strategy, optimize later if needed
+4. **Fixture Classes**: Modern fixtures (PHP classes) are automatically tracked
+5. **Pre-commit Hooks**: Use `--staged` flag for pre-commit validation
+6. **Full Scan Patterns**: Add critical config files to trigger complete scans
+7. **Test Imports**: Ensure test files import the classes they test for proper tracking
+8. **Git History**: Use `fetch-depth: 0` in CI to enable proper branch comparison
+
 ## Requirements
 
-- PHP >= 8.1
-- Git repository
-- Composer
+### PHP Version Support
+
+Diffalyzer supports the following PHP versions:
+
+| PHP Version | Status | Tested |
+|-------------|--------|--------|
+| 8.1         | ✅ Supported | ✅ Yes |
+| 8.2         | ✅ Supported | ✅ Yes |
+| 8.3         | ✅ Supported | ✅ Yes |
+| 8.4         | ✅ Supported | ✅ Yes |
+| 8.0 or lower | ❌ Not supported | - |
+
+All versions are actively tested in CI/CD with both `prefer-lowest` and `prefer-stable` dependency strategies.
+
+### Other Requirements
+
+- **Git**: Any recent version
+- **Composer**: 2.0 or higher
 
 ## Dependencies
 
@@ -320,13 +513,6 @@ test:
 
 MIT
 
-## Contributing
-
-Contributions are welcome! Please ensure:
-- PSR-12 compliance
-- Comprehensive tests
-- Updated documentation
-
 ## Author
 
-Created with ❤️ for optimized PHP testing and analysis workflows.
+Created by [Sebastiaan Wouters](https://github.com/sebastiaanwouters) for optimized PHP testing and analysis workflows.

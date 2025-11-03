@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace Diffalyzer\Command;
 
 use Diffalyzer\Analyzer\DependencyAnalyzer;
-use Diffalyzer\Formatter\CsFixerFormatter;
-use Diffalyzer\Formatter\EcsFormatter;
+use Diffalyzer\Formatter\DefaultFormatter;
 use Diffalyzer\Formatter\FormatterInterface;
 use Diffalyzer\Formatter\PhpUnitFormatter;
-use Diffalyzer\Formatter\PsalmFormatter;
 use Diffalyzer\Git\ChangeDetector;
 use Diffalyzer\Matcher\FullScanMatcher;
 use Diffalyzer\Scanner\ProjectScanner;
@@ -33,7 +31,7 @@ final class AnalyzeCommand extends Command
                 'output',
                 'o',
                 InputOption::VALUE_REQUIRED,
-                'Output format: phpunit, psalm, ecs, cs-fixer'
+                'Output format: test (test files only) or files (all affected files)'
             )
             ->addOption(
                 'strategy',
@@ -77,8 +75,8 @@ final class AnalyzeCommand extends Command
         }
 
         $outputFormat = $input->getOption('output');
-        if (!in_array($outputFormat, ['phpunit', 'psalm', 'ecs', 'cs-fixer'], true)) {
-            $output->writeln('<error>Invalid output format. Use: phpunit, psalm, ecs, or cs-fixer</error>');
+        if (!in_array($outputFormat, ['test', 'files'], true)) {
+            $output->writeln('<error>Invalid output format. Use: test or files</error>');
             return Command::FAILURE;
         }
 
@@ -106,15 +104,17 @@ final class AnalyzeCommand extends Command
 
         try {
             $changeDetector = new ChangeDetector($projectRoot);
-            $changedFiles = $changeDetector->getChangedFiles($from, $to, $staged);
+            $allChangedFiles = $changeDetector->getAllChangedFiles($from, $to, $staged);
 
-            if (empty($changedFiles)) {
+            $fullScanMatcher = new FullScanMatcher();
+            $shouldFullScan = $fullScanMatcher->shouldTriggerFullScan($allChangedFiles, $fullScanPattern);
+
+            $changedFiles = array_filter($allChangedFiles, fn(string $file): bool => str_ends_with($file, '.php'));
+
+            if (empty($changedFiles) && !$shouldFullScan) {
                 $output->write('');
                 return Command::SUCCESS;
             }
-
-            $fullScanMatcher = new FullScanMatcher();
-            $shouldFullScan = $fullScanMatcher->shouldTriggerFullScan($changedFiles, $fullScanPattern);
 
             $formatter = $this->createFormatter($outputFormat, $projectRoot);
             $affectedFiles = [];
@@ -154,10 +154,8 @@ final class AnalyzeCommand extends Command
     private function createFormatter(string $format, string $projectRoot): FormatterInterface
     {
         return match ($format) {
-            'phpunit' => new PhpUnitFormatter($projectRoot),
-            'psalm' => new PsalmFormatter(),
-            'ecs' => new EcsFormatter(),
-            'cs-fixer' => new CsFixerFormatter(),
+            'test' => new PhpUnitFormatter($projectRoot),
+            'files' => new DefaultFormatter(),
         };
     }
 }

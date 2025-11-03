@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         colors="true"
+         beStrictAboutOutputDuringTests="true"
+         failOnRisky="true"
+         failOnWarning="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Matcher</directory>
+            <directory>tests/Formatter</directory>
+            <directory>tests/Visitor</directory>
+            <directory>tests/Strategy</directory>
+            <directory>tests/Scanner</directory>
+            <directory>tests/Analyzer</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
+            <directory>tests/Git</directory>
+        </testsuite>
+        <testsuite name="EdgeCases">
+            <directory>tests/EdgeCases</directory>
+        </testsuite>
+    </testsuites>
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+        <exclude>
+            <file>src/Example.php</file>
+            <file>src/User.php</file>
+            <file>src/UserCollector.php</file>
+        </exclude>
+    </source>
+</phpunit>
