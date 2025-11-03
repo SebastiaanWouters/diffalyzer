@@ -63,6 +63,12 @@ final class AnalyzeCommand extends Command
                 null,
                 InputOption::VALUE_OPTIONAL,
                 'Regex pattern to trigger full scan'
+            )
+            ->addOption(
+                'test-pattern',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Custom regex pattern to match test files (default: Test.php files and tests/ directories)'
             );
     }
 
@@ -91,6 +97,7 @@ final class AnalyzeCommand extends Command
         $to = $input->getOption('to');
         $staged = $input->getOption('staged');
         $fullScanPattern = $input->getOption('full-scan-pattern');
+        $testPattern = $input->getOption('test-pattern');
 
         if ($staged && ($from !== null || $to !== null)) {
             $output->writeln('<error>Cannot use --staged with --from or --to</error>');
@@ -98,7 +105,12 @@ final class AnalyzeCommand extends Command
         }
 
         if ($fullScanPattern !== null && @preg_match($fullScanPattern, '') === false) {
-            $output->writeln('<error>Invalid regex pattern</error>');
+            $output->writeln('<error>Invalid regex pattern for --full-scan-pattern</error>');
+            return Command::FAILURE;
+        }
+
+        if ($testPattern !== null && @preg_match($testPattern, '') === false) {
+            $output->writeln('<error>Invalid regex pattern for --test-pattern</error>');
             return Command::FAILURE;
         }
 
@@ -116,7 +128,7 @@ final class AnalyzeCommand extends Command
                 return Command::SUCCESS;
             }
 
-            $formatter = $this->createFormatter($outputFormat, $projectRoot);
+            $formatter = $this->createFormatter($outputFormat, $projectRoot, $testPattern);
             $affectedFiles = [];
 
             if ($shouldFullScan) {
@@ -151,10 +163,10 @@ final class AnalyzeCommand extends Command
         };
     }
 
-    private function createFormatter(string $format, string $projectRoot): FormatterInterface
+    private function createFormatter(string $format, string $projectRoot, ?string $testPattern): FormatterInterface
     {
         return match ($format) {
-            'test' => new PhpUnitFormatter($projectRoot),
+            'test' => new PhpUnitFormatter($projectRoot, $testPattern),
             'files' => new DefaultFormatter(),
         };
     }
