@@ -13,7 +13,7 @@ foreach ([__DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php
     }
 }
 
-$application = new Application('Diffalyzer', '1.0.0');
+$application = new Application('Diffalyzer', '1.1.0');
 $application->add(new AnalyzeCommand());
 $application->setDefaultCommand('analyze', true);
 $application->run();
