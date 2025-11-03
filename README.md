@@ -167,10 +167,24 @@ Fastest but may miss some affected files.
 ## Output Behavior
 
 ### Partial Scan (Normal Mode)
-- **PHPUnit**: Space-separated test file paths (e.g., `tests/Foo/BarTest.php tests/Baz/QuxTest.php`)
-- **Psalm**: Space-separated PHP file paths (e.g., `src/Foo/Bar.php src/Baz/Qux.php`)
-- **ECS**: Space-separated PHP file paths
-- **PHP-CS-Fixer**: Space-separated PHP file paths
+
+#### PHPUnit Output
+Outputs **space-separated test file paths** that are affected by the changes:
+
+1. **Direct test files**: Tests for files that changed directly
+   - `src/User.php` changed → outputs `tests/UserTest.php`
+
+2. **Transitive test files**: Tests for files that depend on changed files
+   - `src/User.php` changed → `src/UserCollector.php` depends on it → outputs `tests/UserCollectorTest.php`
+
+3. **Changed test files**: Test files that were modified directly
+   - `tests/UserTest.php` changed → outputs `tests/UserTest.php`
+
+Example output: `tests/UserTest.php tests/UserCollectorTest.php`
+
+#### Other Formats (Psalm/ECS/PHP-CS-Fixer)
+Outputs **space-separated source file paths** (includes both source and test files):
+- Example: `src/Foo/Bar.php src/Baz/Qux.php tests/FooTest.php`
 
 ### Full Scan Mode
 When `--full-scan-pattern` matches or no specific files are needed:
@@ -188,20 +202,33 @@ When `--full-scan-pattern` matches or no specific files are needed:
 
 ### Example Workflow
 
+**Step 1: Git detects changes**
+```
+Changed: src/User.php
+```
+
+**Step 2: Dependency analysis**
 ```
 User.php changed
     ↓
-UserCollector.php uses User
+UserCollector.php uses User (affected)
     ↓
-UserService.php uses UserCollector
-    ↓
-Output: src/User.php src/UserCollector.php src/UserService.php
+UserService.php uses UserCollector (affected)
 ```
 
-For PHPUnit, this maps to test files:
+**Step 3: Output by format**
+
+For Psalm/ECS/CS-Fixer (all source files):
 ```
-Output: tests/UserTest.php tests/UserCollectorTest.php tests/UserServiceTest.php
+src/User.php src/UserCollector.php src/UserService.php
 ```
+
+For PHPUnit (test files only):
+```
+tests/UserTest.php tests/UserCollectorTest.php tests/UserServiceTest.php
+```
+
+**Result**: Run only the 3 tests affected by the User.php change, not all 100+ tests in your suite!
 
 ## CI/CD Integration
 
