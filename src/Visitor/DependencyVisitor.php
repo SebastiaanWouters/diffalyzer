@@ -18,7 +18,6 @@ final class DependencyVisitor extends NodeVisitorAbstract
     private array $staticCalls = [];
     private array $methodCalls = [];
     private array $declaredClasses = [];
-    private array $fileReferences = [];
 
     public function enterNode(Node $node): null|int|Node
     {
@@ -102,93 +101,7 @@ final class DependencyVisitor extends NodeVisitorAbstract
             }
         }
 
-        if ($node instanceof Node\Expr\FuncCall) {
-            $this->extractFileReferences($node);
-        }
-
-        if ($node instanceof Node\Expr\Include_) {
-            $this->extractFilePathFromNode($node->expr);
-        }
-
         return null;
-    }
-
-    private function extractFileReferences(Node\Expr\FuncCall $node): void
-    {
-        if (!$node->name instanceof Node\Name) {
-            return;
-        }
-
-        $funcName = $node->name->toString();
-        $fileLoadingFunctions = [
-            'file_get_contents', 'file', 'readfile', 'fopen',
-            'include', 'include_once', 'require', 'require_once',
-            'parse_ini_file', 'simplexml_load_file', 'json_decode',
-        ];
-
-        if (in_array($funcName, $fileLoadingFunctions, true) && !empty($node->args)) {
-            $this->extractFilePathFromNode($node->args[0]->value);
-        }
-    }
-
-    private function extractFilePathFromNode(Node $node): void
-    {
-        if ($node instanceof Node\Scalar\String_) {
-            $path = $node->value;
-            if ($this->looksLikeFilePath($path)) {
-                $this->fileReferences[] = $path;
-            }
-        }
-
-        if ($node instanceof Node\Expr\BinaryOp\Concat) {
-            $this->extractConcatenatedPath($node);
-        }
-    }
-
-    private function extractConcatenatedPath(Node\Expr\BinaryOp\Concat $node): void
-    {
-        $parts = [];
-        $this->collectConcatParts($node, $parts);
-
-        $hasDir = false;
-        $pathParts = [];
-
-        foreach ($parts as $part) {
-            if ($part === '__DIR__' || $part === 'dirname') {
-                $hasDir = true;
-            } elseif (is_string($part)) {
-                $pathParts[] = $part;
-            }
-        }
-
-        if ($hasDir && !empty($pathParts)) {
-            $path = implode('', $pathParts);
-            if ($this->looksLikeFilePath($path)) {
-                $this->fileReferences[] = $path;
-            }
-        }
-    }
-
-    private function collectConcatParts(Node $node, array &$parts): void
-    {
-        if ($node instanceof Node\Expr\BinaryOp\Concat) {
-            $this->collectConcatParts($node->left, $parts);
-            $this->collectConcatParts($node->right, $parts);
-        } elseif ($node instanceof Node\Scalar\String_) {
-            $parts[] = $node->value;
-        } elseif ($node instanceof Node\Scalar\MagicConst\Dir) {
-            $parts[] = '__DIR__';
-        } elseif ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
-            $parts[] = $node->name->toString();
-        }
-    }
-
-    private function looksLikeFilePath(string $path): bool
-    {
-        return preg_match('/\.(php|json|xml|ya?ml|csv|txt|sql|ini)$/i', $path) === 1 ||
-               str_contains($path, '/fixtures/') ||
-               str_contains($path, '/data/') ||
-               str_contains($path, '/resources/');
     }
 
     public function getUses(): array
@@ -229,11 +142,6 @@ final class DependencyVisitor extends NodeVisitorAbstract
     public function getDeclaredClasses(): array
     {
         return array_unique($this->declaredClasses);
-    }
-
-    public function getFileReferences(): array
-    {
-        return array_unique($this->fileReferences);
     }
 
     private function resolveName(Node\Name $name): string

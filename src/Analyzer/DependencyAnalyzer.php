@@ -15,7 +15,6 @@ final class DependencyAnalyzer
     private array $dependencyGraph = [];
     private array $reverseDependencyGraph = [];
     private array $classToFileMap = [];
-    private array $fileToFileDependencies = [];
 
     public function __construct(
         private readonly string $projectRoot,
@@ -49,51 +48,12 @@ final class DependencyAnalyzer
 
                 $dependencies = $this->strategy->extractDependencies($visitor);
                 $this->dependencyGraph[$file] = $dependencies;
-
-                $fileRefs = $visitor->getFileReferences();
-                if (!empty($fileRefs)) {
-                    $this->fileToFileDependencies[$file] = $this->resolveFixturePaths($file, $fileRefs);
-                }
             } catch (Error $error) {
                 continue;
             }
         }
 
         $this->buildReverseDependencyGraph();
-    }
-
-    private function resolveFixturePaths(string $sourceFile, array $fileReferences): array
-    {
-        $resolved = [];
-        $sourceDir = dirname($this->getAbsolutePath($sourceFile));
-
-        foreach ($fileReferences as $ref) {
-            $ref = ltrim($ref, '/');
-
-            $possiblePaths = [
-                $ref,
-                'tests/fixtures/' . $ref,
-                'tests/data/' . $ref,
-                'fixtures/' . $ref,
-                'data/' . $ref,
-            ];
-
-            foreach ($possiblePaths as $path) {
-                $absolutePath = $this->projectRoot . '/' . $path;
-                if (file_exists($absolutePath)) {
-                    $resolved[] = $path;
-                    break;
-                }
-
-                $relativeToSource = $sourceDir . '/' . $ref;
-                if (file_exists($relativeToSource)) {
-                    $resolved[] = str_replace($this->projectRoot . '/', '', $relativeToSource);
-                    break;
-                }
-            }
-        }
-
-        return $resolved;
     }
 
     private function buildReverseDependencyGraph(): void
@@ -111,16 +71,6 @@ final class DependencyAnalyzer
                 }
 
                 $this->reverseDependencyGraph[$dependencyFile][] = $file;
-            }
-        }
-
-        foreach ($this->fileToFileDependencies as $file => $referencedFiles) {
-            foreach ($referencedFiles as $referencedFile) {
-                if (!isset($this->reverseDependencyGraph[$referencedFile])) {
-                    $this->reverseDependencyGraph[$referencedFile] = [];
-                }
-
-                $this->reverseDependencyGraph[$referencedFile][] = $file;
             }
         }
     }
