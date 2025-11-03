@@ -1,9 +1,9 @@
 <?php return array(
     'root' => array(
         'name' => 'sebastiaanwouters/diffalyzer',
-        'pretty_version' => 'dev-master',
-        'version' => 'dev-master',
-        'reference' => 'b7c119fffa828ff87bcd800d89752b9736b03fc4',
+        'pretty_version' => 'dev-main',
+        'version' => 'dev-main',
+        'reference' => '5ce96e43d3ba5d712e92f838672915ab9b7f8282',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -116,9 +116,9 @@
             ),
         ),
         'sebastiaanwouters/diffalyzer' => array(
-            'pretty_version' => 'dev-master',
-            'version' => 'dev-master',
-            'reference' => 'b7c119fffa828ff87bcd800d89752b9736b03fc4',
+            'pretty_version' => 'dev-main',
+            'version' => 'dev-main',
+            'reference' => '5ce96e43d3ba5d712e92f838672915ab9b7f8282',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
