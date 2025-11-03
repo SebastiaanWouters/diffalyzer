@@ -7,7 +7,8 @@ namespace Diffalyzer\Formatter;
 final class PhpUnitFormatter implements FormatterInterface
 {
     public function __construct(
-        private readonly string $projectRoot
+        private readonly string $projectRoot,
+        private readonly ?string $testPattern = null
     ) {
     }
 
@@ -24,6 +25,10 @@ final class PhpUnitFormatter implements FormatterInterface
 
     private function isTestFile(string $file): bool
     {
+        if ($this->testPattern !== null) {
+            return preg_match($this->testPattern, $file) === 1;
+        }
+
         return str_contains($file, 'Test.php') ||
                str_starts_with($file, 'tests/') ||
                str_starts_with($file, 'test/') ||

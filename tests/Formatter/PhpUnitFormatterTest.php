@@ -117,4 +117,91 @@ final class PhpUnitFormatterTest extends TestCase
         // spec files don't match our test patterns
         $this->assertSame('', $result);
     }
+
+    public function testCustomTestPatternMatchesSpecFiles(): void
+    {
+        $formatter = new PhpUnitFormatter('/project/root', '/Spec\.php$/');
+        $files = ['spec/UserSpec.php', 'tests/UserTest.php', 'src/User.php'];
+        $result = $formatter->format($files, false);
+
+        $this->assertStringContainsString('spec/UserSpec.php', $result);
+        // When using custom pattern, default patterns are ignored
+        $this->assertStringNotContainsString('tests/UserTest.php', $result);
+        $this->assertStringNotContainsString('src/User.php', $result);
+    }
+
+    public function testCustomTestPatternWithSpecDirectory(): void
+    {
+        $formatter = new PhpUnitFormatter('/project/root', '/^spec\//');
+        $files = ['spec/UserSpec.php', 'spec/Unit/FooSpec.php', 'tests/UserTest.php', 'src/User.php'];
+        $result = $formatter->format($files, false);
+
+        $this->assertStringContainsString('spec/UserSpec.php', $result);
+        $this->assertStringContainsString('spec/Unit/FooSpec.php', $result);
+        // Default test patterns should not match with custom pattern
+        $this->assertStringNotContainsString('tests/UserTest.php', $result);
+        $this->assertStringNotContainsString('src/User.php', $result);
+    }
+
+    public function testCustomTestPatternWithMultipleOptions(): void
+    {
+        $formatter = new PhpUnitFormatter('/project/root', '/(Test\.php|Spec\.php)$/');
+        $files = [
+            'tests/UserTest.php',
+            'spec/UserSpec.php',
+            'tests/FooTest.php',
+            'spec/BarSpec.php',
+            'src/User.php'
+        ];
+        $result = $formatter->format($files, false);
+
+        $this->assertStringContainsString('tests/UserTest.php', $result);
+        $this->assertStringContainsString('spec/UserSpec.php', $result);
+        $this->assertStringContainsString('tests/FooTest.php', $result);
+        $this->assertStringContainsString('spec/BarSpec.php', $result);
+        $this->assertStringNotContainsString('src/User.php', $result);
+    }
+
+    public function testCustomTestPatternOverridesDefaultBehavior(): void
+    {
+        // Pattern that only matches files ending with 'Integration.php'
+        $formatter = new PhpUnitFormatter('/project/root', '/Integration\.php$/');
+        $files = [
+            'tests/UserTest.php',
+            'tests/UserIntegration.php',
+            'src/User.php'
+        ];
+        $result = $formatter->format($files, false);
+
+        $this->assertStringContainsString('tests/UserIntegration.php', $result);
+        // Even though UserTest.php would match default pattern, it shouldn't match custom pattern
+        $this->assertStringNotContainsString('tests/UserTest.php', $result);
+        $this->assertStringNotContainsString('src/User.php', $result);
+    }
+
+    public function testCustomTestPatternWithCaseInsensitiveMatch(): void
+    {
+        $formatter = new PhpUnitFormatter('/project/root', '/test\.php$/i');
+        $files = [
+            'tests/usertest.php',
+            'tests/UserTEST.php',
+            'tests/UserTest.php',
+            'src/User.php'
+        ];
+        $result = $formatter->format($files, false);
+
+        $this->assertStringContainsString('tests/usertest.php', $result);
+        $this->assertStringContainsString('tests/UserTEST.php', $result);
+        $this->assertStringContainsString('tests/UserTest.php', $result);
+        $this->assertStringNotContainsString('src/User.php', $result);
+    }
+
+    public function testNullCustomPatternUsesDefaultBehavior(): void
+    {
+        $formatter = new PhpUnitFormatter('/project/root', null);
+        $files = ['tests/UserTest.php', 'src/User.php'];
+        $result = $formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php', $result);
+    }
 }
