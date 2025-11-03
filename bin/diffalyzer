@@ -1,0 +1,19 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use Diffalyzer\Command\AnalyzeCommand;
+use Symfony\Component\Console\Application;
+
+foreach ([__DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'] as $file) {
+    if (file_exists($file)) {
+        require $file;
+        break;
+    }
+}
+
+$application = new Application('Diffalyzer', '1.0.0');
+$application->add(new AnalyzeCommand());
+$application->setDefaultCommand('analyze', true);
+$application->run();
