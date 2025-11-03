@@ -7,7 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2025-01-XX
+## [1.0.1] - 2025-11-03
+
+### Fixed
+- PHP 8.1 compatibility by supporting both Symfony 6.4+ and 7.x
+- PHP 8.1 compatibility by supporting both PHPUnit 10.5+ and 11.x
+- Removed redundant CI workflow that was causing confusion
+
+### Changed
+- Updated dependency constraints to support wider PHP version range
+- Simplified CI/CD workflows
+
+## [1.0.0] - 2025-11-03
 
 ### Added
 - Initial release of Diffalyzer
@@ -46,5 +57,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git repository
 - Composer 2.0+
 
-[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sebastiaanwouters/diffalyzer/releases/tag/v1.0.0
