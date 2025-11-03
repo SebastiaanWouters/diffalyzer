@@ -505,9 +505,9 @@ All versions are actively tested in CI/CD with both `prefer-lowest` and `prefer-
 ## Dependencies
 
 - `nikic/php-parser` ^5.0
-- `symfony/console` ^7.0
-- `symfony/process` ^7.0
-- `symfony/finder` ^7.0
+- `symfony/console` ^6.4 || ^7.0
+- `symfony/process` ^6.4 || ^7.0
+- `symfony/finder` ^6.4 || ^7.0
 
 ## License
 
