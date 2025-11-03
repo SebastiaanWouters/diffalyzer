@@ -6,15 +6,23 @@ namespace Diffalyzer\Matcher;
 
 final class FullScanMatcher
 {
-    public function shouldTriggerFullScan(array $changedFiles, ?string $pattern): bool
+    private const BUILT_IN_PATTERNS = [
+        '/composer\.(json|lock)$/',
+    ];
+
+    public function shouldTriggerFullScan(array $changedFiles, ?string $userPattern): bool
     {
-        if ($pattern === null || $pattern === '') {
-            return false;
+        $patterns = self::BUILT_IN_PATTERNS;
+
+        if ($userPattern !== null && $userPattern !== '') {
+            $patterns[] = $userPattern;
         }
 
         foreach ($changedFiles as $file) {
-            if (preg_match($pattern, $file) === 1) {
-                return true;
+            foreach ($patterns as $pattern) {
+                if (preg_match($pattern, $file) === 1) {
+                    return true;
+                }
             }
         }
 

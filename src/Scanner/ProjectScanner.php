@@ -32,4 +32,33 @@ final class ProjectScanner
 
         return $files;
     }
+
+    public function getAllFixtureFiles(): array
+    {
+        if (!is_dir($this->projectRoot)) {
+            return [];
+        }
+
+        $finder = new Finder();
+
+        try {
+            $finder
+                ->files()
+                ->in($this->projectRoot)
+                ->name(['*.json', '*.xml', '*.yaml', '*.yml', '*.csv', '*.txt', '*.sql', '*.ini'])
+                ->path(['fixtures', 'data', 'resources'])
+                ->exclude(['vendor', 'node_modules', '.git'])
+                ->ignoreVCS(true);
+        } catch (\Exception $e) {
+            return [];
+        }
+
+        $files = [];
+        foreach ($finder as $file) {
+            $relativePath = str_replace($this->projectRoot . '/', '', $file->getRealPath());
+            $files[] = $relativePath;
+        }
+
+        return $files;
+    }
 }
