@@ -27,9 +27,9 @@ class User
     {
         return $this->age;
     }
-}
 
     public function getFullInfo(): string
     {
         return $this->name . ' - ' . $this->email;
     }
+}
