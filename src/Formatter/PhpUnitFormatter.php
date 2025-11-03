@@ -22,21 +22,28 @@ final class PhpUnitFormatter implements FormatterInterface
         $testFiles = [];
 
         foreach ($files as $file) {
-            $testFile = $this->mapToTestFile($file);
-            if ($testFile !== null && file_exists($this->projectRoot . '/' . $testFile)) {
-                $testFiles[] = $testFile;
+            if ($this->isTestFile($file)) {
+                $testFiles[] = $file;
+            } else {
+                $testFile = $this->mapToTestFile($file);
+                if ($testFile !== null && file_exists($this->projectRoot . '/' . $testFile)) {
+                    $testFiles[] = $testFile;
+                }
             }
         }
 
         return implode(' ', array_unique($testFiles));
     }
 
+    private function isTestFile(string $file): bool
+    {
+        return str_contains($file, 'Test.php') ||
+               str_starts_with($file, 'tests/') ||
+               str_starts_with($file, 'test/');
+    }
+
     private function mapToTestFile(string $file): ?string
     {
-        if (str_contains($file, 'Test.php')) {
-            return $file;
-        }
-
         foreach (self::TEST_DIRECTORIES as $testDir) {
             $testFile = preg_replace(
                 '/^src\/(.+)\.php$/',
