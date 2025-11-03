@@ -169,18 +169,33 @@ Fastest but may miss some affected files.
 ### Partial Scan (Normal Mode)
 
 #### PHPUnit Output
-Outputs **space-separated test file paths** that are affected by the changes:
+Outputs **space-separated test file paths** that are affected by the changes.
 
-1. **Direct test files**: Tests for files that changed directly
-   - `src/User.php` changed → outputs `tests/UserTest.php`
+**How it works:**
+The tool uses AST-based dependency analysis to find ALL test files that import or use the affected classes. It does NOT assume file naming conventions or directory structures.
 
-2. **Transitive test files**: Tests for files that depend on changed files
-   - `src/User.php` changed → `src/UserCollector.php` depends on it → outputs `tests/UserCollectorTest.php`
+**Examples:**
 
-3. **Changed test files**: Test files that were modified directly
-   - `tests/UserTest.php` changed → outputs `tests/UserTest.php`
+1. **Test files that import changed classes**
+   - `src/User.php` changes (declares `Diffalyzer\User`)
+   - `tests/UserTest.php` imports `Diffalyzer\User` → **included in output**
+   - Works regardless of file names or directory structure
 
-Example output: `tests/UserTest.php tests/UserCollectorTest.php`
+2. **Transitive dependencies**
+   - `src/User.php` changes
+   - `src/UserCollector.php` imports/uses `User` → affected
+   - `tests/UserCollectorTest.php` imports `UserCollector` → **included in output**
+   - Full dependency chain is traversed automatically
+
+3. **Test files that changed directly**
+   - `tests/UserTest.php` modified → **included in output**
+
+4. **No assumptions about structure**
+   - Works with `tests/`, `test/`, `Tests/`, `Test/`, or any directory
+   - Works with any test file naming convention (as long as it contains "Test.php")
+   - Works with custom project structures
+
+Example output: `tests/UserTest.php tests/UserCollectorTest.php tests/Integration/UserFlowTest.php`
 
 #### Other Formats (Psalm/ECS/PHP-CS-Fixer)
 Outputs **space-separated source file paths** (includes both source and test files):
