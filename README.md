@@ -195,6 +195,12 @@ The tool uses AST-based dependency analysis to find ALL test files that import o
    - Works with any test file naming convention (as long as it contains "Test.php")
    - Works with custom project structures
 
+5. **Data fixtures via PHP classes**
+   - If tests use fixture/factory classes (e.g., `UserFixture`, `UserFactory`)
+   - Changes to those fixture classes are tracked via normal dependency analysis
+   - When `UserFixture.php` changes → tests importing it are included
+   - No special configuration needed
+
 Example output: `tests/UserTest.php tests/UserCollectorTest.php tests/Integration/UserFlowTest.php`
 
 #### Other Formats (Psalm/ECS/PHP-CS-Fixer)
@@ -206,6 +212,13 @@ When `--full-scan-pattern` matches or no specific files are needed:
 - All formats output an **empty string**
 - Empty output tells each tool to scan the entire project
 - Example: `phpunit` with no arguments runs all tests
+
+**Built-in Full Scan Triggers:**
+The following files **automatically** trigger a full scan (no `--full-scan-pattern` needed):
+- `composer.json` - Dependencies changed, could affect anything
+- `composer.lock` - Dependency versions changed
+
+You can add additional patterns with `--full-scan-pattern` to supplement these built-in triggers.
 
 ## How It Works
 

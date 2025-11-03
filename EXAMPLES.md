@@ -206,15 +206,14 @@ jobs:
 
 ---
 
-## Example 9: Composer Dependencies Change
+## Example 9: Composer Dependencies Change (Automatic)
 
 ### Scenario
 You update `composer.json` or `composer.lock`.
 
 ### Command
 ```bash
-php bin/diffalyzer --output phpunit \
-  --full-scan-pattern '/composer\.(json|lock)$/'
+php bin/diffalyzer --output phpunit
 ```
 
 ### Output
@@ -223,7 +222,8 @@ php bin/diffalyzer --output phpunit \
 ```
 
 ### Explanation
-Dependency changes can affect anything, so run the full suite.
+Composer file changes **automatically** trigger a full scan (built-in feature).
+No `--full-scan-pattern` needed! Dependency changes can affect anything.
 
 ---
 
@@ -269,3 +269,64 @@ vendor/bin/phpunit $(php bin/diffalyzer --output phpunit --from origin/main)
 - **10x** more iterations per day
 - Faster feedback loop for developers
 
+
+---
+
+## Example 11: Data Fixtures via PHP Classes
+
+### Scenario
+You have fixture classes that provide test data, and tests import them.
+
+### File Structure
+```
+src/Fixtures/UserFixture.php  (provides User objects for testing)
+tests/UserServiceTest.php      (imports UserFixture)
+tests/UserRepositoryTest.php   (imports UserFixture)
+```
+
+### UserFixture.php
+```php
+<?php
+namespace App\Fixtures;
+
+use App\User;
+
+class UserFixture
+{
+    public static function createTestUser(): User
+    {
+        return new User('Test User', 'test@example.com');
+    }
+}
+```
+
+### Tests using the fixture
+```php
+use App\Fixtures\UserFixture;
+
+class UserServiceTest
+{
+    public function testSomething(): void
+    {
+        $user = UserFixture::createTestUser();
+        // test logic...
+    }
+}
+```
+
+### When UserFixture.php Changes
+
+```bash
+php bin/diffalyzer --output phpunit
+```
+
+### Output
+```
+tests/UserServiceTest.php tests/UserRepositoryTest.php
+```
+
+### Explanation
+Both tests import `UserFixture`, so they're included via normal AST dependency analysis.
+No special fixture tracking needed - it works like any other PHP class dependency!
+
+---
