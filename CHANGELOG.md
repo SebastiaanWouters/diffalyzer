@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-11-03
+
+### Added
+- `--test-pattern` flag to customize test file matching with custom regex patterns
+- Support for non-standard test file naming conventions (e.g., *Spec.php, *Integration.php)
+- Comprehensive test coverage for custom test pattern functionality
+
+### Changed
+- Custom test pattern overrides default behavior when provided
+- Improved error message specificity for `--full-scan-pattern` validation
+
 ## [1.0.1] - 2025-11-03
 
 ### Fixed
@@ -57,6 +68,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git repository
 - Composer 2.0+
 
-[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sebastiaanwouters/diffalyzer/releases/tag/v1.0.0
