@@ -3,7 +3,7 @@
         'name' => 'sebastiaanwouters/diffalyzer',
         'pretty_version' => 'dev-main',
         'version' => 'dev-main',
-        'reference' => '5ce96e43d3ba5d712e92f838672915ab9b7f8282',
+        'reference' => '9b0cb4f83afcd17ea29e2ad313a4db903188ff73',
         'type' => 'library',
         'install_path' => __DIR__ . '/../../',
         'aliases' => array(),
@@ -118,7 +118,7 @@
         'sebastiaanwouters/diffalyzer' => array(
             'pretty_version' => 'dev-main',
             'version' => 'dev-main',
-            'reference' => '5ce96e43d3ba5d712e92f838672915ab9b7f8282',
+            'reference' => '9b0cb4f83afcd17ea29e2ad313a4db903188ff73',
             'type' => 'library',
             'install_path' => __DIR__ . '/../../',
             'aliases' => array(),

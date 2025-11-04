@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-11-04
+
+### Added
+- **Caching System**: Intelligent caching with file hash tracking for faster subsequent analysis
+  - `CacheManager` for managing cached dependency graphs
+  - `FileHashRegistry` for tracking file changes
+  - `CacheInvalidator` for selective cache invalidation
+- **Parallel Parsing**: Multi-threaded AST parsing for improved performance on large codebases
+- **.gitignore Support**: Automatic filtering of ignored files using `GitignoreFilter`
+- Incremental analysis support - only re-parse changed files when cache is available
+
+### Changed
+- `DependencyAnalyzer` now supports caching with automatic invalidation
+- Cache can be disabled with `setCacheEnabled(false)` method
+- Updated `.gitignore` to exclude `.diffalyzer/` cache directory
+
+### Performance
+- Significantly faster analysis on subsequent runs with caching enabled
+- Parallel parsing reduces initial analysis time for large projects
+
 ## [1.1.0] - 2025-11-03
 
 ### Added
@@ -68,7 +88,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git repository
 - Composer 2.0+
 
-[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/sebastiaanwouters/diffalyzer/releases/tag/v1.0.0

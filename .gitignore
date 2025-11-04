@@ -25,3 +25,6 @@ Thumbs.db
 /.psalm/
 /phpstan.neon
 /.phpcs-cache
+
+# Diffalyzer cache
+/.diffalyzer/
