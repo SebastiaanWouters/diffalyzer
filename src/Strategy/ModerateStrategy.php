@@ -10,11 +10,22 @@ final class ModerateStrategy implements StrategyInterface
 {
     public function extractDependencies(DependencyVisitor $visitor): array
     {
-        return array_unique(array_merge(
-            $visitor->getUses(),
-            $visitor->getExtends(),
-            $visitor->getImplements(),
-            $visitor->getTraits()
-        ));
+        // Use array keys for O(1) deduplication across categories
+        $dependencies = [];
+
+        foreach ($visitor->getUses() as $class) {
+            $dependencies[$class] = true;
+        }
+        foreach ($visitor->getExtends() as $class) {
+            $dependencies[$class] = true;
+        }
+        foreach ($visitor->getImplements() as $class) {
+            $dependencies[$class] = true;
+        }
+        foreach ($visitor->getTraits() as $class) {
+            $dependencies[$class] = true;
+        }
+
+        return array_keys($dependencies);
     }
 }

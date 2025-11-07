@@ -49,7 +49,7 @@ class FileHashRegistry
             return false;
         }
 
-        $json = json_encode($this->registry, JSON_PRETTY_PRINT);
+        $json = json_encode($this->registry);
         return file_put_contents($cacheFile, $json) !== false;
     }
 
@@ -73,7 +73,6 @@ class FileHashRegistry
         $this->registry[$relativePath] = [
             'mtime' => $stat['mtime'],
             'size' => $stat['size'],
-            'hash' => $this->computeFileHash($absolutePath),
         ];
     }
 
@@ -181,13 +180,4 @@ class FileHashRegistry
         return $this->projectRoot . '/' . $relativePath;
     }
 
-    private function computeFileHash(string $absolutePath): string
-    {
-        // Use xxHash if available, otherwise md5 (fast enough for cache validation)
-        if (function_exists('xxh64')) {
-            return xxh64(file_get_contents($absolutePath));
-        }
-
-        return md5_file($absolutePath);
-    }
 }
