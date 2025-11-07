@@ -136,6 +136,59 @@ final class DependencyAnalyzer
      */
     private function parseFiles(array $phpFiles, bool $isIncremental = false): void
     {
+        // Use parallel parsing for large file sets (not incremental updates)
+        // Threshold: minimum 100 files to justify parallel overhead
+        // This also helps avoid issues in test environments without proper vendor/ directories
+        if (!$isIncremental && count($phpFiles) >= 100 && $this->shouldUseParallelParsing()) {
+            $this->parseFilesParallel($phpFiles);
+            return;
+        }
+
+        // Sequential parsing for small sets or incremental updates
+        $this->parseFilesSequential($phpFiles, $isIncremental);
+    }
+
+    /**
+     * Check if parallel parsing should be used
+     */
+    private function shouldUseParallelParsing(): bool
+    {
+        // Check if vendor/autoload.php exists (required for parallel workers)
+        return file_exists($this->projectRoot . '/vendor/autoload.php');
+    }
+
+    /**
+     * Parse files in parallel using multiple processes
+     */
+    private function parseFilesParallel(array $phpFiles): void
+    {
+        $parallelParser = new ParallelParser($this->projectRoot, $this->strategy);
+        $results = $parallelParser->parseFiles($phpFiles);
+
+        if (empty($results)) {
+            // Parallel parsing failed, fall back to sequential
+            $this->parseFilesSequential($phpFiles, false);
+            return;
+        }
+
+        // Merge results into existing graphs
+        $this->dependencyGraph = array_merge(
+            $this->dependencyGraph,
+            $results['dependencyGraph'] ?? []
+        );
+        $this->classToFileMap = array_merge(
+            $this->classToFileMap,
+            $results['classToFileMap'] ?? []
+        );
+
+        $this->filesParsed += count($phpFiles);
+    }
+
+    /**
+     * Parse files sequentially (original implementation)
+     */
+    private function parseFilesSequential(array $phpFiles, bool $isIncremental): void
+    {
         $parser = (new ParserFactory())->createForNewestSupportedVersion();
         $traverser = new NodeTraverser();
 

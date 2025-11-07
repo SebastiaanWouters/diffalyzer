@@ -88,7 +88,7 @@ class CacheManager
             'data' => $graphData,
         ];
 
-        $json = json_encode($data, JSON_PRETTY_PRINT);
+        $json = json_encode($data);
         if ($json === false) {
             return false;
         }

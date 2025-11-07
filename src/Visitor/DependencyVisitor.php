@@ -10,6 +10,7 @@ use PhpParser\NodeVisitorAbstract;
 final class DependencyVisitor extends NodeVisitorAbstract
 {
     private ?string $currentNamespace = null;
+    // Use array keys for O(1) deduplication instead of array_unique
     private array $uses = [];
     private array $extends = [];
     private array $implements = [];
@@ -27,14 +28,14 @@ final class DependencyVisitor extends NodeVisitorAbstract
 
         if ($node instanceof Node\Stmt\Use_) {
             foreach ($node->uses as $use) {
-                $this->uses[] = $use->name->toString();
+                $this->uses[$use->name->toString()] = true;
             }
         }
 
         if ($node instanceof Node\Stmt\GroupUse) {
             $prefix = $node->prefix->toString();
             foreach ($node->uses as $use) {
-                $this->uses[] = $prefix . '\\' . $use->name->toString();
+                $this->uses[$prefix . '\\' . $use->name->toString()] = true;
             }
         }
 
@@ -43,15 +44,15 @@ final class DependencyVisitor extends NodeVisitorAbstract
                 $className = $this->currentNamespace !== null
                     ? $this->currentNamespace . '\\' . $node->name->toString()
                     : $node->name->toString();
-                $this->declaredClasses[] = $className;
+                $this->declaredClasses[$className] = true;
             }
 
             if ($node->extends !== null) {
-                $this->extends[] = $this->resolveName($node->extends);
+                $this->extends[$this->resolveName($node->extends)] = true;
             }
 
             foreach ($node->implements as $interface) {
-                $this->implements[] = $this->resolveName($interface);
+                $this->implements[$this->resolveName($interface)] = true;
             }
         }
 
@@ -60,11 +61,11 @@ final class DependencyVisitor extends NodeVisitorAbstract
                 $interfaceName = $this->currentNamespace !== null
                     ? $this->currentNamespace . '\\' . $node->name->toString()
                     : $node->name->toString();
-                $this->declaredClasses[] = $interfaceName;
+                $this->declaredClasses[$interfaceName] = true;
             }
 
             foreach ($node->extends as $interface) {
-                $this->extends[] = $this->resolveName($interface);
+                $this->extends[$this->resolveName($interface)] = true;
             }
         }
 
@@ -73,31 +74,31 @@ final class DependencyVisitor extends NodeVisitorAbstract
                 $traitName = $this->currentNamespace !== null
                     ? $this->currentNamespace . '\\' . $node->name->toString()
                     : $node->name->toString();
-                $this->declaredClasses[] = $traitName;
+                $this->declaredClasses[$traitName] = true;
             }
         }
 
         if ($node instanceof Node\Stmt\TraitUse) {
             foreach ($node->traits as $trait) {
-                $this->traits[] = $this->resolveName($trait);
+                $this->traits[$this->resolveName($trait)] = true;
             }
         }
 
         if ($node instanceof Node\Expr\New_) {
             if ($node->class instanceof Node\Name) {
-                $this->instantiations[] = $this->resolveName($node->class);
+                $this->instantiations[$this->resolveName($node->class)] = true;
             }
         }
 
         if ($node instanceof Node\Expr\StaticCall) {
             if ($node->class instanceof Node\Name) {
-                $this->staticCalls[] = $this->resolveName($node->class);
+                $this->staticCalls[$this->resolveName($node->class)] = true;
             }
         }
 
         if ($node instanceof Node\Expr\MethodCall) {
             if ($node->var instanceof Node\Expr\Variable && is_string($node->var->name)) {
-                $this->methodCalls[] = $node->var->name;
+                $this->methodCalls[$node->var->name] = true;
             }
         }
 
@@ -106,42 +107,42 @@ final class DependencyVisitor extends NodeVisitorAbstract
 
     public function getUses(): array
     {
-        return array_unique($this->uses);
+        return array_keys($this->uses);
     }
 
     public function getExtends(): array
     {
-        return array_unique($this->extends);
+        return array_keys($this->extends);
     }
 
     public function getImplements(): array
     {
-        return array_unique($this->implements);
+        return array_keys($this->implements);
     }
 
     public function getTraits(): array
     {
-        return array_unique($this->traits);
+        return array_keys($this->traits);
     }
 
     public function getInstantiations(): array
     {
-        return array_unique($this->instantiations);
+        return array_keys($this->instantiations);
     }
 
     public function getStaticCalls(): array
     {
-        return array_unique($this->staticCalls);
+        return array_keys($this->staticCalls);
     }
 
     public function getMethodCalls(): array
     {
-        return array_unique($this->methodCalls);
+        return array_keys($this->methodCalls);
     }
 
     public function getDeclaredClasses(): array
     {
-        return array_unique($this->declaredClasses);
+        return array_keys($this->declaredClasses);
     }
 
     private function resolveName(Node\Name $name): string
