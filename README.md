@@ -13,7 +13,8 @@ A PHP CLI tool that analyzes git changes and outputs affected PHP file paths in 
 - **Dependency Analysis**: Uses nikic/php-parser to build comprehensive dependency graphs
 - **Multiple Strategies**: Choose between conservative, moderate, or minimal analysis depth
 - **Format-Specific Output**: Tailored output for PHPUnit, Psalm, ECS, and PHP-CS-Fixer
-- **Full Scan Triggers**: Regex patterns to force complete project scans for critical files
+- **Configurable Full Scans**: Define patterns in config file or CLI to trigger complete scans
+- **Verbose Diagnostics**: Clear feedback about what's happening with --verbose mode
 - **PSR-12 Compliant**: Clean, readable, and well-structured code
 
 ## Installation
@@ -89,6 +90,17 @@ vendor/bin/diffalyzer --output test --from main
 
 ### Full Scan Pattern
 
+Full-scan patterns can be configured via config file (recommended) or CLI flag:
+
+**Via config file (recommended):**
+```yaml
+# diffalyzer.yml
+full_scan_patterns:
+  - "*.yml"
+  - "config/**"
+```
+
+**Via CLI flag (overrides config):**
 ```bash
 # Trigger full scan if any .yml file changes
 vendor/bin/diffalyzer --output test --full-scan-pattern '/.*\.yml$/'
@@ -148,7 +160,104 @@ vendor/bin/php-cs-fixer fix --dry-run $(vendor/bin/diffalyzer --output files)
 | `--from` | | Source ref for comparison (branch or commit hash) | |
 | `--to` | | Target ref for comparison (branch or commit hash) | `HEAD` |
 | `--staged` | | Only analyze staged files | `false` |
-| `--full-scan-pattern` | | Regex pattern to trigger full scan | |
+| `--full-scan-pattern` | | Regex/glob pattern to trigger full scan (overrides config) | |
+| `--config` | `-c` | Path to config file | Auto-detect |
+| `--verbose` | `-v` | Show detailed diagnostic information (outputs to stderr) | `false` |
+| `--test-pattern` | | Custom regex pattern to match test files | |
+| `--no-cache` | | Disable cache and force full rebuild | `false` |
+| `--clear-cache` | | Clear cache before analysis | `false` |
+| `--cache-stats` | | Show cache statistics after analysis | `false` |
+| `--parallel` | `-p` | Number of parallel workers for parsing | Auto-detect |
+
+## Configuration File
+
+Diffalyzer supports configuration files to centralize settings like full-scan patterns. Configuration files are automatically detected in the following order:
+
+1. `.diffalyzer.yml`
+2. `diffalyzer.yml`
+3. `config.yml`
+
+Or specify a custom path with `--config path/to/config.yml`.
+
+### Example Configuration
+
+```yaml
+# diffalyzer.yml or .diffalyzer.yml
+full_scan_patterns:
+  # Dependency management files
+  - composer.json
+  - composer.lock
+  - package.json
+
+  # Configuration files (glob patterns)
+  - "*.config.php"
+  - "config/**"
+
+  # Build files
+  - Dockerfile
+  - docker-compose.yml
+
+  # Regex patterns (start with / or #)
+  - "/\\.(env|config)$/"
+```
+
+### Pattern Types
+
+**Glob patterns** (recommended for simplicity):
+- `composer.json` - Exact filename match
+- `*.json` - Any file ending with .json
+- `config/**` - Any file in config directory (any depth)
+- `src/*.php` - PHP files in src directory (one level)
+
+**Regex patterns** (for advanced matching):
+- Must start with `/` or `#`
+- `/\.config\.(js|ts)$/` - Matches .config.js or .config.ts
+- `/^(config|deploy)\//` - Matches files in config/ or deploy/ directories
+
+### Complete Override Behavior
+
+When you define patterns in your config file, they **completely replace** the built-in defaults:
+
+- **With config file**: Only your patterns are used
+- **Without config file**: Built-in defaults are used (`composer.json`, `composer.lock`)
+- **With CLI `--full-scan-pattern`**: CLI always overrides everything (config + built-in)
+
+**To disable full scans entirely:**
+```yaml
+full_scan_patterns: []
+```
+
+### Verbose Mode
+
+Use `--verbose` (or `-v`) to see detailed diagnostic information about what diffalyzer is doing:
+
+```bash
+vendor/bin/diffalyzer --output test --verbose
+```
+
+Verbose output (sent to stderr, won't interfere with stdout):
+```
+[diffalyzer] Loaded 3 full-scan pattern(s) from config
+[diffalyzer] Detected 5 changed file(s)
+[diffalyzer] Analyzing 3 PHP file(s)...
+[diffalyzer] Scanned project: found 247 PHP file(s) (0.12s)
+[diffalyzer] Built dependency graph (0.45s)
+[diffalyzer] Found 8 affected file(s)
+
+[diffalyzer] Performance Metrics:
+  Total time: 0.62s
+  Scan time: 0.12s
+  Parse time: 0.45s
+  Changed files: 3
+  Affected files: 8
+```
+
+Or when full scan is triggered:
+```
+[diffalyzer] Full scan triggered: "composer.json" matched pattern "composer.json"
+```
+
+This makes it much clearer what's happening, especially when you get empty output (which means "run on all files").
 
 ## Analysis Strategies
 
@@ -226,17 +335,34 @@ Use this for static analysis tools (Psalm), code style checkers (ECS, PHP-CS-Fix
 Example output: `src/Foo/Bar.php src/Baz/Qux.php tests/FooTest.php`
 
 ### Full Scan Mode
-When `--full-scan-pattern` matches or no specific files are needed:
+When full-scan patterns match or no specific files are needed:
 - All formats output an **empty string**
 - Empty output tells each tool to scan the entire project
 - Example: `phpunit` with no arguments runs all tests
 
-**Built-in Full Scan Triggers:**
-The following files **automatically** trigger a full scan (no `--full-scan-pattern` needed):
+**Full Scan Triggers:**
+
+By default (when no config file is present), these files trigger full scans:
 - `composer.json` - Dependencies changed, could affect anything
 - `composer.lock` - Dependency versions changed
 
-You can add additional patterns with `--full-scan-pattern` to supplement these built-in triggers.
+You can customize this behavior in three ways:
+
+1. **Config file (recommended)**: Define patterns in `diffalyzer.yml` - replaces built-in defaults
+2. **CLI flag**: Use `--full-scan-pattern` - overrides config and built-in defaults
+3. **Disable entirely**: Set `full_scan_patterns: []` in config
+
+**Understanding Empty Output:**
+
+Empty output is **intentional** and can mean two things:
+1. **No changes detected** - No PHP files were modified
+2. **Full scan triggered** - A file matched a full-scan pattern
+
+Use `--verbose` to see which one:
+```bash
+vendor/bin/diffalyzer --output test --verbose
+# Output to stderr will show: "No changes detected" or "Full scan triggered: ..."
+```
 
 ## How It Works
 
@@ -508,6 +634,7 @@ All versions are actively tested in CI/CD with both `prefer-lowest` and `prefer-
 - `symfony/console` ^6.4 || ^7.0
 - `symfony/process` ^6.4 || ^7.0
 - `symfony/finder` ^6.4 || ^7.0
+- `symfony/yaml` ^6.4 || ^7.0
 
 ## License
 

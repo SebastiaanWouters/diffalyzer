@@ -1,1 +1,58 @@
-# Config
+# Diffalyzer Configuration
+#
+# This file configures the behavior of diffalyzer when analyzing your codebase.
+# Configuration files are auto-detected in this order:
+# 1. .diffalyzer.yml
+# 2. diffalyzer.yml
+# 3. config.yml
+#
+# You can also specify a custom config file path with: --config path/to/config.yml
+
+# Full Scan Patterns
+# ------------------
+# Define patterns that trigger a full scan when matched against changed files.
+# When a full scan is triggered, diffalyzer outputs an empty string, which tells
+# most tools (PHPUnit, Psalm, etc.) to run on all files instead of just affected ones.
+#
+# Pattern Types:
+#   - Glob patterns: Simple wildcards like "*.json", "composer.lock", "config/**"
+#   - Regex patterns: Must start with / or #, e.g., "/\.config\.(js|ts)$/"
+#
+# Complete Override Behavior:
+#   - If patterns are defined here, they REPLACE the built-in defaults
+#   - To disable all full scans, set: full_scan_patterns: []
+#   - CLI --full-scan-pattern always overrides config and built-in patterns
+#
+# Built-in defaults (used when this config is empty or not found):
+#   - composer.json
+#   - composer.lock
+
+full_scan_patterns:
+  # Dependency management files (common triggers for full scans)
+  - composer.json
+  - composer.lock
+  # Uncomment to add more patterns:
+  # - package.json
+  # - package-lock.json
+  # - yarn.lock
+  # - pnpm-lock.yaml
+
+  # Configuration files
+  # - "*.config.php"
+  # - "config/**"
+  # - ".env"
+
+  # Build/deployment files
+  # - "Dockerfile"
+  # - "docker-compose.yml"
+
+  # Regex examples (notice the / delimiter):
+  # - "/\\.(env|config)$/"
+  # - "/^(config|deploy)\//"
+
+# Example: Disable full scans entirely
+# full_scan_patterns: []
+
+# Example: Only trigger on package.json changes
+# full_scan_patterns:
+#   - package.json

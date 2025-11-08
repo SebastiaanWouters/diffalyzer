@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Diffalyzer\Command;
 
 use Diffalyzer\Analyzer\DependencyAnalyzer;
+use Diffalyzer\Config\ConfigLoader;
 use Diffalyzer\Formatter\DefaultFormatter;
 use Diffalyzer\Formatter\FormatterInterface;
 use Diffalyzer\Formatter\PhpUnitFormatter;
@@ -18,6 +19,7 @@ use Diffalyzer\Strategy\StrategyInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
+use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 final class AnalyzeCommand extends Command
@@ -93,6 +95,12 @@ final class AnalyzeCommand extends Command
                 'p',
                 InputOption::VALUE_OPTIONAL,
                 'Number of parallel workers for parsing (default: auto-detect CPU count)'
+            )
+            ->addOption(
+                'config',
+                'c',
+                InputOption::VALUE_OPTIONAL,
+                'Path to config file (default: auto-detect .diffalyzer.yml, diffalyzer.yml, or config.yml)'
             );
     }
 
@@ -126,7 +134,11 @@ final class AnalyzeCommand extends Command
         $clearCache = $input->getOption('clear-cache');
         $showCacheStats = $input->getOption('cache-stats');
         $parallelWorkers = $input->getOption('parallel');
+        $configPath = $input->getOption('config');
         $verbose = $output->isVerbose();
+
+        // Get stderr for verbose output (separate from stdout)
+        $stderr = $output instanceof ConsoleOutputInterface ? $output->getErrorOutput() : $output;
 
         if ($staged && ($from !== null || $to !== null)) {
             $output->writeln('<error>Cannot use --staged with --from or --to</error>');
@@ -146,13 +158,33 @@ final class AnalyzeCommand extends Command
         try {
             $startTime = microtime(true);
 
+            // Load configuration
+            $configLoader = new ConfigLoader();
+            $config = $configLoader->load($configPath);
+            $configPatterns = $config['full_scan_patterns'];
+
+            if ($verbose) {
+                if ($configPatterns !== null) {
+                    if (empty($configPatterns)) {
+                        $stderr->writeln('[diffalyzer] Full-scan patterns disabled via config (empty array)');
+                    } else {
+                        $stderr->writeln(sprintf(
+                            '[diffalyzer] Loaded %d full-scan pattern(s) from config',
+                            count($configPatterns)
+                        ));
+                    }
+                } else {
+                    $stderr->writeln('[diffalyzer] Using built-in full-scan patterns (no config file found)');
+                }
+            }
+
             // Initialize analyzer
             $analyzer = new DependencyAnalyzer($projectRoot, $strategy);
 
             // Handle cache options
             if ($clearCache) {
                 if ($verbose) {
-                    $output->writeln('<info>Clearing cache...</info>');
+                    $stderr->writeln('[diffalyzer] Clearing cache...');
                 }
                 $analyzer->clearCache();
             }
@@ -164,12 +196,22 @@ final class AnalyzeCommand extends Command
             $changeDetector = new ChangeDetector($projectRoot);
             $allChangedFiles = $changeDetector->getAllChangedFiles($from, $to, $staged);
 
-            $fullScanMatcher = new FullScanMatcher();
+            if ($verbose) {
+                $stderr->writeln(sprintf(
+                    '[diffalyzer] Detected %d changed file(s)',
+                    count($allChangedFiles)
+                ));
+            }
+
+            $fullScanMatcher = new FullScanMatcher($configPatterns);
             $shouldFullScan = $fullScanMatcher->shouldTriggerFullScan($allChangedFiles, $fullScanPattern);
 
             $changedFiles = array_filter($allChangedFiles, fn(string $file): bool => str_ends_with($file, '.php'));
 
             if (empty($changedFiles) && !$shouldFullScan) {
+                if ($verbose) {
+                    $stderr->writeln('[diffalyzer] No changes detected');
+                }
                 $output->write('');
                 return Command::SUCCESS;
             }
@@ -178,8 +220,23 @@ final class AnalyzeCommand extends Command
             $affectedFiles = [];
 
             if ($shouldFullScan) {
+                $match = $fullScanMatcher->getLastMatch();
+                if ($verbose && $match !== null) {
+                    $stderr->writeln(sprintf(
+                        '[diffalyzer] Full scan triggered: "%s" matched pattern "%s"',
+                        $match['file'],
+                        $match['pattern']
+                    ));
+                }
                 $output->write($formatter->format([], true));
                 return Command::SUCCESS;
+            }
+
+            if ($verbose) {
+                $stderr->writeln(sprintf(
+                    '[diffalyzer] Analyzing %d PHP file(s)...',
+                    count($changedFiles)
+                ));
             }
 
             $scanStartTime = microtime(true);
@@ -188,18 +245,32 @@ final class AnalyzeCommand extends Command
             $scanDuration = microtime(true) - $scanStartTime;
 
             if ($verbose) {
-                $output->writeln(sprintf(
-                    '<info>Found %d PHP files (%.2fs)</info>',
+                $stderr->writeln(sprintf(
+                    '[diffalyzer] Scanned project: found %d PHP file(s) (%.2fs)',
                     count($allPhpFiles),
                     $scanDuration
-                ), OutputInterface::VERBOSITY_VERBOSE);
+                ));
             }
 
             $parseStartTime = microtime(true);
             $analyzer->buildDependencyGraph($allPhpFiles);
             $parseDuration = microtime(true) - $parseStartTime;
 
+            if ($verbose) {
+                $stderr->writeln(sprintf(
+                    '[diffalyzer] Built dependency graph (%.2fs)',
+                    $parseDuration
+                ));
+            }
+
             $affectedFiles = $analyzer->getAffectedFiles($changedFiles);
+
+            if ($verbose) {
+                $stderr->writeln(sprintf(
+                    '[diffalyzer] Found %d affected file(s)',
+                    count($affectedFiles)
+                ));
+            }
 
             $result = $formatter->format($affectedFiles, false);
             $output->write($result);
@@ -211,42 +282,42 @@ final class AnalyzeCommand extends Command
                 $stats = $analyzer->getCacheStats();
 
                 if ($verbose) {
-                    $output->writeln('', OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln('<comment>Performance Metrics:</comment>', OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln(sprintf('  Total time: %.2fs', $totalDuration), OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln(sprintf('  Scan time: %.2fs', $scanDuration), OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln(sprintf('  Parse time: %.2fs', $parseDuration), OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln(sprintf('  Changed files: %d', count($changedFiles)), OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln(sprintf('  Affected files: %d', count($affectedFiles)), OutputInterface::VERBOSITY_VERBOSE);
+                    $stderr->writeln('');
+                    $stderr->writeln('[diffalyzer] Performance Metrics:');
+                    $stderr->writeln(sprintf('  Total time: %.2fs', $totalDuration));
+                    $stderr->writeln(sprintf('  Scan time: %.2fs', $scanDuration));
+                    $stderr->writeln(sprintf('  Parse time: %.2fs', $parseDuration));
+                    $stderr->writeln(sprintf('  Changed files: %d', count($changedFiles)));
+                    $stderr->writeln(sprintf('  Affected files: %d', count($affectedFiles)));
                 }
 
                 if ($showCacheStats) {
-                    $output->writeln('', OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln('<comment>Cache Statistics:</comment>', OutputInterface::VERBOSITY_VERBOSE);
-                    $output->writeln(sprintf('  Cache enabled: %s', $stats['cache_enabled'] ? 'yes' : 'no'), OutputInterface::VERBOSITY_VERBOSE);
+                    $stderr->writeln('');
+                    $stderr->writeln('[diffalyzer] Cache Statistics:');
+                    $stderr->writeln(sprintf('  Cache enabled: %s', $stats['cache_enabled'] ? 'yes' : 'no'));
 
                     if ($stats['cache_enabled']) {
-                        $output->writeln(sprintf('  Files parsed: %d', $stats['files_parsed']), OutputInterface::VERBOSITY_VERBOSE);
-                        $output->writeln(sprintf('  Files from cache: %d', $stats['files_from_cache']), OutputInterface::VERBOSITY_VERBOSE);
+                        $stderr->writeln(sprintf('  Files parsed: %d', $stats['files_parsed']));
+                        $stderr->writeln(sprintf('  Files from cache: %d', $stats['files_from_cache']));
 
                         if (isset($stats['tracked_files'])) {
-                            $output->writeln(sprintf('  Total tracked files: %d', $stats['tracked_files']), OutputInterface::VERBOSITY_VERBOSE);
+                            $stderr->writeln(sprintf('  Total tracked files: %d', $stats['tracked_files']));
                         }
 
                         if (isset($stats['cache_age_seconds'])) {
-                            $output->writeln(sprintf('  Cache age: %ds', $stats['cache_age_seconds']), OutputInterface::VERBOSITY_VERBOSE);
+                            $stderr->writeln(sprintf('  Cache age: %ds', $stats['cache_age_seconds']));
                         }
 
                         if ($stats['files_parsed'] > 0 && $stats['files_from_cache'] > 0) {
                             $totalFiles = $stats['files_parsed'] + $stats['files_from_cache'];
                             $cacheHitRate = ($stats['files_from_cache'] / $totalFiles) * 100;
-                            $output->writeln(sprintf('  Cache hit rate: %.1f%%', $cacheHitRate), OutputInterface::VERBOSITY_VERBOSE);
+                            $stderr->writeln(sprintf('  Cache hit rate: %.1f%%', $cacheHitRate));
 
                             // Estimate time saved
                             if ($parseDuration > 0 && $stats['files_parsed'] > 0) {
                                 $timePerFile = $parseDuration / $stats['files_parsed'];
                                 $timeSaved = $timePerFile * $stats['files_from_cache'];
-                                $output->writeln(sprintf('  Estimated time saved: %.2fs', $timeSaved), OutputInterface::VERBOSITY_VERBOSE);
+                                $stderr->writeln(sprintf('  Estimated time saved: %.2fs', $timeSaved));
                             }
                         }
                     }
@@ -255,10 +326,10 @@ final class AnalyzeCommand extends Command
 
             return Command::SUCCESS;
         } catch (\Exception $e) {
-            $output->writeln('<error>Error: ' . $e->getMessage() . '</error>');
+            $stderr->writeln('<error>[diffalyzer] Error: ' . $e->getMessage() . '</error>');
             if ($verbose) {
-                $output->writeln('<error>Stack trace:</error>', OutputInterface::VERBOSITY_VERBOSE);
-                $output->writeln($e->getTraceAsString(), OutputInterface::VERBOSITY_VERBOSE);
+                $stderr->writeln('<error>Stack trace:</error>');
+                $stderr->writeln($e->getTraceAsString());
             }
             return Command::FAILURE;
         }

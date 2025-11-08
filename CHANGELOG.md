@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2025-11-08
+
+### Added
+- **Configuration File Support**: Define full-scan patterns in YAML config files
+  - Auto-detects `.diffalyzer.yml`, `diffalyzer.yml`, or `config.yml`
+  - Custom config path via `--config` flag
+  - Complete override behavior: config patterns replace built-in defaults
+  - Support for both glob patterns (`*.json`, `config/**`) and regex patterns (`/\.env$/`)
+  - Can disable all full scans with `full_scan_patterns: []`
+- **Verbose Mode**: Detailed diagnostic output via `-v` or `--verbose` flag
+  - Shows which config file was loaded and how many patterns
+  - Displays when full scan is triggered and which file/pattern matched
+  - Outputs to stderr to avoid interfering with tool integration
+  - Shows performance metrics and analysis statistics
+  - Clear feedback when no changes are detected
+- Added `symfony/yaml` dependency for config file parsing
+- New `ConfigLoader` class for loading and parsing configuration files
+- Enhanced `FullScanMatcher` with glob pattern support and pattern tracking
+
+### Changed
+- Full-scan patterns now configurable via YAML instead of being hardcoded
+- CLI `--full-scan-pattern` now completely overrides config patterns (not additive)
+- `FullScanMatcher` now accepts optional config patterns in constructor
+- Empty output behavior is now clearer with verbose mode explaining the reason
+- Built-in patterns (composer.json, composer.lock) only used when no config file exists
+
+### Improved
+- Better user experience with clear diagnostic messages about what diffalyzer is doing
+- More flexible configuration allowing per-project customization
+- Easier to disable built-in full-scan triggers when not needed
+
 ## [1.3.0] - 2025-11-08
 
 ### Performance
@@ -107,7 +138,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git repository
 - Composer 2.0+
 
-[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.0.1...v1.1.0
