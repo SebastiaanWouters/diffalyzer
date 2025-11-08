@@ -123,9 +123,10 @@ class FileHashRegistry
             }
         }
 
-        // Check for deleted files
+        // Check for deleted files - O(n) with array_flip() instead of O(n²) with in_array()
+        $currentFilesSet = array_flip($currentFiles);
         foreach (array_keys($this->registry) as $cachedFile) {
-            if (!in_array($cachedFile, $currentFiles, true)) {
+            if (!isset($currentFilesSet[$cachedFile])) {
                 $changed[] = $cachedFile;
             }
         }

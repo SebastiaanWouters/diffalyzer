@@ -172,14 +172,22 @@ PHP;
     {
         $dependencyGraph = [];
         $classToFileMap = [];
+        $fileToClassesMap = [];
 
         foreach ($results as $file => $data) {
             if (!isset($data['declaredClasses']) || !isset($data['dependencies'])) {
                 continue;
             }
 
-            foreach ($data['declaredClasses'] as $className) {
+            $declaredClasses = $data['declaredClasses'];
+
+            // Build both forward and reverse class mappings
+            foreach ($declaredClasses as $className) {
                 $classToFileMap[$className] = $file;
+            }
+
+            if (!empty($declaredClasses)) {
+                $fileToClassesMap[$file] = $declaredClasses;
             }
 
             $dependencyGraph[$file] = $data['dependencies'];
@@ -188,6 +196,7 @@ PHP;
         return [
             'dependencyGraph' => $dependencyGraph,
             'classToFileMap' => $classToFileMap,
+            'fileToClassesMap' => $fileToClassesMap,
         ];
     }
 

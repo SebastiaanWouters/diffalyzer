@@ -7,28 +7,52 @@ namespace Diffalyzer\Analyzer;
 use Diffalyzer\Cache\CacheInvalidator;
 use Diffalyzer\Cache\CacheManager;
 use Diffalyzer\Cache\FileHashRegistry;
+use Diffalyzer\Parser\AstBasedParser;
+use Diffalyzer\Parser\ParserInterface;
+use Diffalyzer\Parser\TokenBasedParser;
 use Diffalyzer\Strategy\StrategyInterface;
-use Diffalyzer\Visitor\DependencyVisitor;
-use PhpParser\Error;
-use PhpParser\NodeTraverser;
-use PhpParser\ParserFactory;
 
 final class DependencyAnalyzer
 {
     private array $dependencyGraph = [];
     private array $reverseDependencyGraph = [];
     private array $classToFileMap = [];
+    private array $fileToClassesMap = []; // Reverse index: file => [class1, class2, ...] for O(1) cleanup
     private ?CacheManager $cacheManager = null;
     private ?FileHashRegistry $registry = null;
     private ?CacheInvalidator $invalidator = null;
     private bool $cacheEnabled = true;
     private int $filesParsed = 0;
     private int $filesFromCache = 0;
+    private ParserInterface $parser;
 
     public function __construct(
         private readonly string $projectRoot,
-        private readonly StrategyInterface $strategy
+        private readonly StrategyInterface $strategy,
+        ?string $parserType = null
     ) {
+        // Default to token-based parser for 5-10x speedup
+        $this->parser = $this->createParser($parserType ?? 'token');
+    }
+
+    /**
+     * Create parser instance based on type
+     */
+    private function createParser(string $type): ParserInterface
+    {
+        return match (strtolower($type)) {
+            'ast' => new AstBasedParser(),
+            'token' => new TokenBasedParser(),
+            default => new TokenBasedParser(),
+        };
+    }
+
+    /**
+     * Set the parser type to use (for testing and configuration)
+     */
+    public function setParserType(string $type): void
+    {
+        $this->parser = $this->createParser($type);
     }
 
     /**
@@ -94,6 +118,7 @@ final class DependencyAnalyzer
         // Restore cached data
         $this->dependencyGraph = $cachedData['dependencyGraph'] ?? [];
         $this->classToFileMap = $cachedData['classToFileMap'] ?? [];
+        $this->fileToClassesMap = $cachedData['fileToClassesMap'] ?? [];
         $this->reverseDependencyGraph = $cachedData['reverseDependencyGraph'] ?? [];
 
         // Detect changed files
@@ -109,10 +134,12 @@ final class DependencyAnalyzer
         $cleaned = $this->invalidator->removeDeletedFiles(
             $phpFiles,
             $this->dependencyGraph,
-            $this->classToFileMap
+            $this->classToFileMap,
+            $this->fileToClassesMap
         );
         $this->dependencyGraph = $cleaned['dependencyGraph'];
         $this->classToFileMap = $cleaned['classToFileMap'];
+        $this->fileToClassesMap = $cleaned['fileToClassesMap'];
 
         // Incremental update: parse only changed files
         $this->parseFiles($changedFiles, true);
@@ -180,61 +207,55 @@ final class DependencyAnalyzer
             $this->classToFileMap,
             $results['classToFileMap'] ?? []
         );
+        $this->fileToClassesMap = array_merge(
+            $this->fileToClassesMap,
+            $results['fileToClassesMap'] ?? []
+        );
 
         $this->filesParsed += count($phpFiles);
     }
 
     /**
-     * Parse files sequentially (original implementation)
+     * Parse files sequentially using configured parser
      */
     private function parseFilesSequential(array $phpFiles, bool $isIncremental): void
     {
-        $parser = (new ParserFactory())->createForNewestSupportedVersion();
-        $traverser = new NodeTraverser();
-
         foreach ($phpFiles as $file) {
             $absolutePath = $this->getAbsolutePath($file);
             if (!file_exists($absolutePath)) {
                 continue;
             }
 
-            try {
-                $code = file_get_contents($absolutePath);
-                if ($code === false) {
-                    continue;
-                }
-
-                $ast = $parser->parse($code);
-                if ($ast === null) {
-                    continue;
-                }
-
-                $visitor = new DependencyVisitor();
-                $traverser->addVisitor($visitor);
-                $traverser->traverse($ast);
-                $traverser->removeVisitor($visitor);
-
-                // Remove old class mappings for this file (in incremental mode)
-                if ($isIncremental) {
-                    foreach ($this->classToFileMap as $class => $mappedFile) {
-                        if ($mappedFile === $file) {
-                            unset($this->classToFileMap[$class]);
-                        }
-                    }
-                }
-
-                // Add new class mappings
-                foreach ($visitor->getDeclaredClasses() as $className) {
-                    $this->classToFileMap[$className] = $file;
-                }
-
-                $dependencies = $this->strategy->extractDependencies($visitor);
-                $this->dependencyGraph[$file] = $dependencies;
-
-                $this->filesParsed++;
-            } catch (Error $error) {
+            $code = file_get_contents($absolutePath);
+            if ($code === false) {
                 continue;
             }
+
+            // Use configured parser (token-based or AST-based)
+            $result = $this->parser->parse($code);
+
+            // Remove old class mappings for this file (in incremental mode)
+            // Optimized: O(k) instead of O(m×n) where k = classes per file
+            if ($isIncremental && isset($this->fileToClassesMap[$file])) {
+                foreach ($this->fileToClassesMap[$file] as $class) {
+                    unset($this->classToFileMap[$class]);
+                }
+                unset($this->fileToClassesMap[$file]);
+            }
+
+            // Add new class mappings and maintain reverse index
+            $declaredClasses = $result->getDeclaredClasses();
+            foreach ($declaredClasses as $className) {
+                $this->classToFileMap[$className] = $file;
+            }
+            if (!empty($declaredClasses)) {
+                $this->fileToClassesMap[$file] = $declaredClasses;
+            }
+
+            $dependencies = $this->strategy->extractDependenciesFromResult($result);
+            $this->dependencyGraph[$file] = $dependencies;
+
+            $this->filesParsed++;
         }
     }
 
@@ -255,6 +276,7 @@ final class DependencyAnalyzer
         $graphData = [
             'dependencyGraph' => $this->dependencyGraph,
             'classToFileMap' => $this->classToFileMap,
+            'fileToClassesMap' => $this->fileToClassesMap,
             'reverseDependencyGraph' => $this->reverseDependencyGraph,
         ];
         $this->cacheManager->saveGraph($graphData);

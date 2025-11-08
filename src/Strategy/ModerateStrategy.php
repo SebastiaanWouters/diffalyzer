@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Diffalyzer\Strategy;
 
+use Diffalyzer\Parser\ParseResult;
 use Diffalyzer\Visitor\DependencyVisitor;
 
 final class ModerateStrategy implements StrategyInterface
@@ -23,6 +24,27 @@ final class ModerateStrategy implements StrategyInterface
             $dependencies[$class] = true;
         }
         foreach ($visitor->getTraits() as $class) {
+            $dependencies[$class] = true;
+        }
+
+        return array_keys($dependencies);
+    }
+
+    public function extractDependenciesFromResult(ParseResult $result): array
+    {
+        // Use array keys for O(1) deduplication across categories
+        $dependencies = [];
+
+        foreach ($result->getUses() as $class) {
+            $dependencies[$class] = true;
+        }
+        foreach ($result->getExtends() as $class) {
+            $dependencies[$class] = true;
+        }
+        foreach ($result->getImplements() as $class) {
+            $dependencies[$class] = true;
+        }
+        foreach ($result->getTraits() as $class) {
             $dependencies[$class] = true;
         }
 

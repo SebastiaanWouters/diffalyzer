@@ -41,12 +41,14 @@ class CacheInvalidator
      * @param array $currentFiles Currently existing files
      * @param array $dependencyGraph Dependency graph to clean
      * @param array $classToFileMap Class to file mapping to clean
+     * @param array $fileToClassesMap File to classes mapping to clean
      * @return array Cleaned data structures
      */
     public function removeDeletedFiles(
         array $currentFiles,
         array $dependencyGraph,
-        array $classToFileMap
+        array $classToFileMap,
+        array $fileToClassesMap = []
     ): array {
         $currentFilesSet = array_flip($currentFiles);
 
@@ -66,9 +68,18 @@ class CacheInvalidator
             }
         }
 
+        // Remove deleted files from file-to-classes map
+        $cleanedFileToClassesMap = [];
+        foreach ($fileToClassesMap as $file => $classes) {
+            if (isset($currentFilesSet[$file])) {
+                $cleanedFileToClassesMap[$file] = $classes;
+            }
+        }
+
         return [
             'dependencyGraph' => $cleanedGraph,
             'classToFileMap' => $cleanedClassMap,
+            'fileToClassesMap' => $cleanedFileToClassesMap,
         ];
     }
 
@@ -76,21 +87,28 @@ class CacheInvalidator
      * Invalidate cache for files affected by changed dependencies
      *
      * @param array $changedFiles Files that changed
-     * @param array $classToFileMap Mapping of classes to files
+     * @param array $classToFileMap Mapping of classes to files (for backward compatibility)
      * @param array $dependencyGraph Dependency graph
+     * @param array $fileToClassesMap File to classes mapping (optimized reverse lookup)
      * @return array Additional files that might be affected
      */
     public function getIndirectlyAffectedFiles(
         array $changedFiles,
         array $classToFileMap,
-        array $dependencyGraph
+        array $dependencyGraph,
+        array $fileToClassesMap = []
     ): array {
         $affected = [];
 
         // For each changed file, find what classes it defines
         // Then find all files that depend on those classes
         foreach ($changedFiles as $changedFile) {
-            $definedClasses = $this->getClassesDefinedInFile($changedFile, $classToFileMap);
+            // Use optimized reverse map if available, otherwise fall back to O(n) scan
+            $definedClasses = $this->getClassesDefinedInFile(
+                $changedFile,
+                $fileToClassesMap,
+                $classToFileMap
+            );
 
             foreach ($definedClasses as $class) {
                 // Find all files that import/use this class
@@ -129,11 +147,25 @@ class CacheInvalidator
 
     /**
      * Get all classes defined in a file
+     * Optimized: O(1) lookup when fileToClassesMap is available, O(n) fallback otherwise
+     *
+     * @param string $file File path
+     * @param array $fileToClassesMap Optimized reverse map (file => classes)
+     * @param array $classToFileMap Fallback forward map (class => file)
+     * @return array List of classes
      */
-    private function getClassesDefinedInFile(string $file, array $classToFileMap): array
-    {
-        $classes = [];
+    private function getClassesDefinedInFile(
+        string $file,
+        array $fileToClassesMap,
+        array $classToFileMap = []
+    ): array {
+        // Prefer O(1) lookup if reverse map is available
+        if (!empty($fileToClassesMap) && isset($fileToClassesMap[$file])) {
+            return $fileToClassesMap[$file];
+        }
 
+        // Fallback to O(n) scan for backward compatibility
+        $classes = [];
         foreach ($classToFileMap as $class => $classFile) {
             if ($classFile === $file) {
                 $classes[] = $class;
