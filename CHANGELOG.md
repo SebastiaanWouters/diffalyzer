@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.2] - 2025-11-10
+
+### Fixed
+- **Critical bug**: `formatMethods()` was outputting invalid PHPUnit syntax (file::method pairs)
+  - Now properly converts method-level output to PHPUnit's `--filter` argument format
+  - Example: `tests/UserTest.php tests/FooTest.php --filter '/testLogin|testLogout|testBar/'`
+  - Previously output: `tests/UserTest.php::testLogin tests/UserTest.php::testLogout tests/FooTest.php::testBar`
+  - PHPUnit does not support `::` syntax; method filtering requires `--filter` with the filename
+
 ## [1.7.1] - 2025-01-10
 
 ### Added

@@ -68,15 +68,19 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
             return '';
         }
 
-        $formatted = [];
+        $fileMethodPairs = [];
         foreach ($methods as $method) {
-            $formatted[] = $this->methodToFileMethod($method);
+            $pair = $this->methodToFileMethod($method);
+            if ($pair !== null) {
+                $fileMethodPairs[] = $pair;
+            }
         }
 
-        // Remove nulls (methods that couldn't be resolved)
-        $formatted = array_filter($formatted);
+        if (empty($fileMethodPairs)) {
+            return '';
+        }
 
-        return implode(' ', $formatted);
+        return $this->buildPhpUnitCommand($fileMethodPairs);
     }
 
     /**
