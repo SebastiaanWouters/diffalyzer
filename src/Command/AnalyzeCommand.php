@@ -8,6 +8,8 @@ use Diffalyzer\Analyzer\DependencyAnalyzer;
 use Diffalyzer\Analyzer\TestMethodAnalyzer;
 use Diffalyzer\Config\ConfigLoader;
 use Diffalyzer\Formatter\FormatterInterface;
+use Diffalyzer\Formatter\MethodAwareFormatterInterface;
+use Diffalyzer\Formatter\PhpStanFormatter;
 use Diffalyzer\Formatter\PhpUnitFormatter;
 use Diffalyzer\Formatter\PsalmFormatter;
 use Diffalyzer\Git\ChangeDetector;
@@ -31,7 +33,7 @@ final class AnalyzeCommand extends Command
                 'output',
                 'o',
                 InputOption::VALUE_REQUIRED,
-                'Output format: "phpunit" for test files, "psalm" for all files (default: phpunit)',
+                'Output format: "phpunit" for test files, "psalm" or "phpstan" for all files (default: phpunit)',
                 'phpunit'
             )
             ->addOption(
@@ -117,8 +119,8 @@ final class AnalyzeCommand extends Command
         }
 
         $outputFormat = $input->getOption('output');
-        if (!in_array($outputFormat, ['phpunit', 'psalm', 'test'], true)) {
-            $output->writeln('<error>Invalid output format. Supported formats: phpunit, psalm</error>');
+        if (!in_array($outputFormat, ['phpunit', 'psalm', 'phpstan', 'test'], true)) {
+            $output->writeln('<error>Invalid output format: "' . $outputFormat . '". Supported formats: phpunit, psalm, phpstan</error>');
             return Command::FAILURE;
         }
 
@@ -409,8 +411,26 @@ final class AnalyzeCommand extends Command
                 }
             }
 
-            // Output affected files (method-level analysis already mapped to files above)
-            $result = $formatter->format($affectedFiles, false);
+            // Output affected methods or files depending on formatter capability and analysis mode
+            if ($methodLevel && $formatter instanceof MethodAwareFormatterInterface && !empty($affectedMethods)) {
+                $result = $formatter->formatMethods($affectedMethods, false);
+            } else {
+                $result = $formatter->format($affectedFiles, false);
+            }
+
+            // Provide diagnostic information if output is empty
+            if (empty($result)) {
+                if ($outputFormat === 'phpunit' && !empty($affectedFiles)) {
+                    $stderr->writeln('<comment>[diffalyzer] No test files found in affected files. Files changed but no matching tests detected.</comment>');
+                    $stderr->writeln('<comment>[diffalyzer] Hint: Check your test file patterns or use --output=psalm to see all affected files.</comment>');
+                } elseif (empty($affectedFiles) && !empty($changedFiles)) {
+                    $stderr->writeln('<comment>[diffalyzer] Files changed but no dependencies affected. This might indicate isolated changes.</comment>');
+                } elseif ($methodLevel && empty($affectedMethods) && !empty($changedFiles)) {
+                    $stderr->writeln('<comment>[diffalyzer] No affected methods detected. Changes may not impact tracked method calls.</comment>');
+                    $stderr->writeln('<comment>[diffalyzer] Hint: Try --file-level for broader analysis or --verbose for more details.</comment>');
+                }
+            }
+
             $output->write($result);
 
             // Show performance metrics
@@ -482,6 +502,7 @@ final class AnalyzeCommand extends Command
         return match ($format) {
             'phpunit' => new PhpUnitFormatter($projectRoot, $classToFileMap, $testPattern),
             'psalm' => new PsalmFormatter($classToFileMap),
+            'phpstan' => new PhpStanFormatter($classToFileMap),
             default => new PhpUnitFormatter($projectRoot, $classToFileMap, $testPattern),
         };
     }
