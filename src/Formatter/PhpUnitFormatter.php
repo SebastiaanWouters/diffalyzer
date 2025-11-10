@@ -68,19 +68,45 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
             return '';
         }
 
-        $fileMethodPairs = [];
+        // Collect unique files for all affected methods
+        $files = [];
         foreach ($methods as $method) {
-            $pair = $this->methodToFileMethod($method);
-            if ($pair !== null) {
-                $fileMethodPairs[] = $pair;
+            $file = $this->methodToFile($method);
+            if ($file !== null) {
+                $files[$file] = true;
             }
         }
 
-        if (empty($fileMethodPairs)) {
+        if (empty($files)) {
             return '';
         }
 
-        return $this->buildPhpUnitCommand($fileMethodPairs);
+        // Return just the file paths (method-level filtering would require
+        // running PHPUnit separately for each file, which is not practical)
+        return implode(' ', array_keys($files));
+    }
+
+    /**
+     * Convert fully qualified method name to file path only
+     *
+     * @param string $fqMethodName e.g., "App\Tests\UserTest::testLogin"
+     * @return string|null e.g., "tests/UserTest.php" or null if not resolvable
+     */
+    private function methodToFile(string $fqMethodName): ?string
+    {
+        // Split class::method
+        if (!str_contains($fqMethodName, '::')) {
+            return null;
+        }
+
+        [$className, $_] = explode('::', $fqMethodName, 2);
+
+        // Look up file for class
+        if (!isset($this->classToFileMap[$className])) {
+            return null;
+        }
+
+        return $this->classToFileMap[$className];
     }
 
     /**

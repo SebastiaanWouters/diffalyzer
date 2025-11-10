@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.3] - 2025-11-10
+
+### Fixed
+- **Critical bug**: Method-level output with `--filter` was unreliable with PHPUnit
+  - v1.7.2 attempted to use `--filter '/method1|method2|...'/'` syntax with multiple files
+  - This caused PHPUnit to skip test files that didn't contain all the filtered method names
+  - Example: `tests/FileA.php tests/FileB.php --filter '/testA|testB/'` would only run tests from files containing both methods
+  - Now `formatMethods()` outputs only the test file paths without method filtering
+  - This ensures all relevant test files run completely, trading method granularity for reliability
+  - Method-level dependency analysis still determines which files to run (this is the key value)
+
 ## [1.7.2] - 2025-11-10
 
 ### Fixed
@@ -15,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Example: `tests/UserTest.php tests/FooTest.php --filter '/testLogin|testLogout|testBar/'`
   - Previously output: `tests/UserTest.php::testLogin tests/UserTest.php::testLogout tests/FooTest.php::testBar`
   - PHPUnit does not support `::` syntax; method filtering requires `--filter` with the filename
+  - **Note**: This approach was found to be unreliable and fixed in v1.7.3
 
 ## [1.7.1] - 2025-01-10
 
