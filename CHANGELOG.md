@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.2] - 2025-11-10
+
+### Improved
+- **Full-scan pattern functionality** with glob pattern support and enhanced diagnostics
+  - Added support for glob patterns (e.g., `*.xml`, `phpunit.xml`, `config/**`) alongside regex patterns
+  - Glob patterns don't require delimiters, making them simpler and more intuitive to use
+  - Enhanced `--verbose` output to show which files changed and whether patterns matched
+  - Improved pattern validation with clearer error messages and helpful examples
+  - Added warning when CLI pattern is provided but doesn't match any changed files
+  - Better documentation with comprehensive troubleshooting section for pattern usage
+
+### Added
+- Comprehensive pattern usage examples in README for both glob and regex patterns
+- Troubleshooting section specifically for full-scan pattern issues
+- New test cases for glob pattern matching and CLI pattern override behavior
+- Helpful feedback when patterns don't match, guiding users to correct syntax
+
+### Changed
+- Pattern validation now distinguishes between regex patterns (starting with `/` or `#`) and glob patterns
+- Verbose mode now lists all changed files to help with pattern debugging
+- Error messages now include pattern syntax examples and recommendations
+
+## [1.6.1] - 2025-11-10
+
+### Added
+- **PHPStan Output Format**: New `--output=phpstan` option for PHPStan integration
+- Empty output diagnostics to help users understand why no output is generated
+- Diagnostic messages for different scenarios:
+  - "No test files found in affected files" (PHPUnit mode)
+  - "Files changed but no dependencies affected" (isolated changes)
+  - "No affected methods detected" (method-level analysis)
+
+### Fixed
+- **Critical bug**: `formatMethods()` was never called, preventing method-level output from working
+- Method-level analysis now correctly outputs method names instead of just files
+- PHPUnit, Psalm, and PHPStan formatters now properly support method-level granularity
+
+### Improved
+- Error messages now show which format was invalid and list all supported formats
+- Help text updated to mention phpstan format
+- Diagnostics include helpful hints for troubleshooting
+
+## [1.6.0] - 2025-11-10
+
+### Added - Major Release 🎯
+- **Method-Level Granularity**: Revolutionary precision for test targeting
+  - Method-level change detection using git diff analysis
+  - Method call graph construction for dependency tracking
+  - Test method analysis to map tests to production code
+  - Identifies exact test methods that exercise changed code instead of entire files
+  - Backward compatible with `--file-level` flag to revert to file-level analysis
+
+### New Components
+- `TestMethodAnalyzer` for test method identification
+- `MethodCallExtractor` for method-level call graph construction
+- `MethodChangeParser` for git diff method tracking
+- `MethodAwareFormatterInterface` for method output support
+- Enhanced formatters (PHPUnit, Psalm) with method-to-file mapping
+
+### Configuration
+- Method-level granularity enabled by default
+- `--method-level` flag to explicitly enable (default behavior)
+- `--file-level` flag to revert to file-level granularity
+- Updated config.yml with comprehensive documentation
+
+### Performance
+- More precise test targeting reduces test execution overhead
+- Minimal performance impact compared to file-level analysis
+- Efficient method call graph construction using token-based parsing
+
 ## [1.5.0] - 2025-11-08
 
 ### Performance - Major Release 🚀
@@ -188,7 +258,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Git repository
 - Composer 2.0+
 
-[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.6.2...HEAD
+[1.6.2]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.6.1...v1.6.2
+[1.6.1]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/sebastiaanwouters/diffalyzer/compare/v1.2.0...v1.3.0
