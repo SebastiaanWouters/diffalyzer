@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.5] - 2025-11-10
+
+### Fixed
+- **Bug**: `formatMethods()` was including non-test classes and invalid method names in PHPUnit filter
+  - Previously checked if class name contained "Test" anywhere, matching classes like `TestHelper`, `InternalTestData`
+  - Also included invalid entries like `assertSame`, `service` when method names were malformed
+  - Now strictly validates that class names end with `Test` or `TestCase`
+  - This prevents overly broad PHPUnit filters that could match unintended test methods
+
+### Added
+- Comprehensive test coverage for `formatMethods()` to prevent regression
+- Test cases for filtering out non-test classes and invalid method names
+
 ## [1.7.4] - 2025-11-10
 
 ### Fixed

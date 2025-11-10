@@ -68,12 +68,10 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
             return '';
         }
 
-        // Collect unique test class names from the affected methods
         $testClasses = [];
         foreach ($methods as $method) {
             $className = $this->extractClassName($method);
             if ($className !== null && $this->isTestClass($className)) {
-                // Extract just the class name (without namespace) for the filter
                 $parts = explode('\\', $className);
                 $shortName = end($parts);
                 $testClasses[$shortName] = true;
@@ -86,8 +84,6 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
 
         $classNames = array_keys($testClasses);
 
-        // Use --filter with class names (backward compatible with PHPUnit 9+)
-        // This avoids the issue where PHPUnit 9 doesn't support multiple file arguments
         if (count($classNames) === 1) {
             return '--filter ' . reset($classNames);
         }
@@ -119,7 +115,13 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
      */
     private function isTestClass(string $className): bool
     {
-        return str_contains($className, 'Test');
+        // Extract just the class name (without namespace)
+        $parts = explode('\\', $className);
+        $shortName = end($parts);
+
+        // Only accept classes that end with Test or TestCase
+        // This prevents matching service/entity classes that just contain "test" in their name
+        return str_ends_with($shortName, 'Test') || str_ends_with($shortName, 'TestCase');
     }
 
     /**

@@ -374,4 +374,64 @@ final class PhpUnitFormatterTest extends TestCase
         $this->assertSame('spec/UserSpec.php --filter testUserCreation', $result);
         $this->assertStringNotContainsString('tests/UserTest.php', $result);
     }
+
+    public function testFormatMethodsWithSingleTestMethod(): void
+    {
+        $methods = ['App\\Tests\\UserTest::testLogin'];
+        $result = $this->formatter->formatMethods($methods, false);
+
+        $this->assertSame('--filter UserTest', $result);
+    }
+
+    public function testFormatMethodsWithMultipleTestMethods(): void
+    {
+        $methods = [
+            'App\\Tests\\UserTest::testLogin',
+            'App\\Tests\\AccountTest::testCreate'
+        ];
+        $result = $this->formatter->formatMethods($methods, false);
+
+        $this->assertSame('--filter \'/UserTest|AccountTest/\'', $result);
+    }
+
+    public function testFormatMethodsFiltersOutNonTestClasses(): void
+    {
+        $methods = [
+            'App\\Service\\UserService::getUserById',
+            'App\\Tests\\UserTest::testLogin',
+            'App\\Repository\\UserRepository::findAll',
+            'assertSame',
+            'service'
+        ];
+        $result = $this->formatter->formatMethods($methods, false);
+
+        $this->assertSame('--filter UserTest', $result);
+    }
+
+    public function testFormatMethodsWithFullScan(): void
+    {
+        $methods = ['App\\Tests\\UserTest::testLogin'];
+        $result = $this->formatter->formatMethods($methods, true);
+
+        $this->assertSame('', $result);
+    }
+
+    public function testFormatMethodsWithEmptyArray(): void
+    {
+        $result = $this->formatter->formatMethods([], false);
+
+        $this->assertSame('', $result);
+    }
+
+    public function testFormatMethodsIgnoresClassesNotEndingWithTest(): void
+    {
+        $methods = [
+            'App\\Service\\TestHelper::doSomething',
+            'App\\Tests\\UserTest::testLogin',
+            'App\\Model\\InternalTestData::getData'
+        ];
+        $result = $this->formatter->formatMethods($methods, false);
+
+        $this->assertSame('--filter UserTest', $result);
+    }
 }
