@@ -13,7 +13,7 @@ final class PhpUnitFormatterTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->formatter = new PhpUnitFormatter('/project/root');
+        $this->formatter = new PhpUnitFormatter('/project/root', []);
     }
 
     public function testFullScanReturnsEmptyString(): void
@@ -120,7 +120,7 @@ final class PhpUnitFormatterTest extends TestCase
 
     public function testCustomTestPatternMatchesSpecFiles(): void
     {
-        $formatter = new PhpUnitFormatter('/project/root', '/Spec\.php$/');
+        $formatter = new PhpUnitFormatter('/project/root', [], '/Spec\.php$/');
         $files = ['spec/UserSpec.php', 'tests/UserTest.php', 'src/User.php'];
         $result = $formatter->format($files, false);
 
@@ -132,7 +132,7 @@ final class PhpUnitFormatterTest extends TestCase
 
     public function testCustomTestPatternWithSpecDirectory(): void
     {
-        $formatter = new PhpUnitFormatter('/project/root', '/^spec\//');
+        $formatter = new PhpUnitFormatter('/project/root', [], '/^spec\//');
         $files = ['spec/UserSpec.php', 'spec/Unit/FooSpec.php', 'tests/UserTest.php', 'src/User.php'];
         $result = $formatter->format($files, false);
 
@@ -145,7 +145,7 @@ final class PhpUnitFormatterTest extends TestCase
 
     public function testCustomTestPatternWithMultipleOptions(): void
     {
-        $formatter = new PhpUnitFormatter('/project/root', '/(Test\.php|Spec\.php)$/');
+        $formatter = new PhpUnitFormatter('/project/root', [], '/(Test\.php|Spec\.php)$/');
         $files = [
             'tests/UserTest.php',
             'spec/UserSpec.php',
@@ -165,7 +165,7 @@ final class PhpUnitFormatterTest extends TestCase
     public function testCustomTestPatternOverridesDefaultBehavior(): void
     {
         // Pattern that only matches files ending with 'Integration.php'
-        $formatter = new PhpUnitFormatter('/project/root', '/Integration\.php$/');
+        $formatter = new PhpUnitFormatter('/project/root', [], '/Integration\.php$/');
         $files = [
             'tests/UserTest.php',
             'tests/UserIntegration.php',
@@ -181,7 +181,7 @@ final class PhpUnitFormatterTest extends TestCase
 
     public function testCustomTestPatternWithCaseInsensitiveMatch(): void
     {
-        $formatter = new PhpUnitFormatter('/project/root', '/test\.php$/i');
+        $formatter = new PhpUnitFormatter('/project/root', [], '/test\.php$/i');
         $files = [
             'tests/usertest.php',
             'tests/UserTEST.php',
@@ -198,10 +198,62 @@ final class PhpUnitFormatterTest extends TestCase
 
     public function testNullCustomPatternUsesDefaultBehavior(): void
     {
-        $formatter = new PhpUnitFormatter('/project/root', null);
+        $formatter = new PhpUnitFormatter('/project/root', [], null);
         $files = ['tests/UserTest.php', 'src/User.php'];
         $result = $formatter->format($files, false);
 
         $this->assertSame('tests/UserTest.php', $result);
+    }
+
+    public function testExcludesFixtureFiles(): void
+    {
+        $files = [
+            'tests/UserTest.php',
+            'tests/Fixtures/UserDataFixture.php',
+            'tests/DataFixtures/LoadUserData.php',
+            'tests/_support/Helper.php',
+            'tests/fixtures/data.php',
+            'src/User.php'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertStringContainsString('tests/UserTest.php', $result);
+        $this->assertStringNotContainsString('Fixtures', $result);
+        $this->assertStringNotContainsString('DataFixtures', $result);
+        $this->assertStringNotContainsString('_support', $result);
+        $this->assertStringNotContainsString('fixtures', $result);
+    }
+
+    public function testExcludesHelperFiles(): void
+    {
+        $files = [
+            'tests/UserTest.php',
+            'tests/TestHelper.php',
+            'tests/TestCase.php',
+            'tests/AbstractTestCase.php',
+            'tests/helpers/TestHelper.php',
+            'src/User.php'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertStringContainsString('tests/UserTest.php', $result);
+        $this->assertStringNotContainsString('TestHelper.php', $result);
+        $this->assertStringNotContainsString('TestCase.php', $result);
+        $this->assertStringNotContainsString('AbstractTestCase.php', $result);
+    }
+
+    public function testExcludesBootstrapFiles(): void
+    {
+        $files = [
+            'tests/UserTest.php',
+            'tests/bootstrap.php',
+            'tests/_bootstrap.php',
+            'src/User.php'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertStringContainsString('tests/UserTest.php', $result);
+        $this->assertStringNotContainsString('bootstrap.php', $result);
+        $this->assertStringNotContainsString('_bootstrap.php', $result);
     }
 }

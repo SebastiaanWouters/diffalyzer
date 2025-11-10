@@ -5,17 +5,15 @@ declare(strict_types=1);
 namespace Diffalyzer\Command;
 
 use Diffalyzer\Analyzer\DependencyAnalyzer;
+use Diffalyzer\Analyzer\TestMethodAnalyzer;
 use Diffalyzer\Config\ConfigLoader;
-use Diffalyzer\Formatter\DefaultFormatter;
 use Diffalyzer\Formatter\FormatterInterface;
 use Diffalyzer\Formatter\PhpUnitFormatter;
+use Diffalyzer\Formatter\PsalmFormatter;
 use Diffalyzer\Git\ChangeDetector;
 use Diffalyzer\Matcher\FullScanMatcher;
 use Diffalyzer\Scanner\ProjectScanner;
 use Diffalyzer\Strategy\ConservativeStrategy;
-use Diffalyzer\Strategy\MinimalStrategy;
-use Diffalyzer\Strategy\ModerateStrategy;
-use Diffalyzer\Strategy\StrategyInterface;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -33,14 +31,8 @@ final class AnalyzeCommand extends Command
                 'output',
                 'o',
                 InputOption::VALUE_REQUIRED,
-                'Output format: test (test files only) or files (all affected files)'
-            )
-            ->addOption(
-                'strategy',
-                's',
-                InputOption::VALUE_OPTIONAL,
-                'Analysis strategy: conservative, moderate, minimal',
-                'conservative'
+                'Output format: "phpunit" for test files, "psalm" for all files (default: phpunit)',
+                'phpunit'
             )
             ->addOption(
                 'from',
@@ -101,6 +93,18 @@ final class AnalyzeCommand extends Command
                 'c',
                 InputOption::VALUE_OPTIONAL,
                 'Path to config file (default: auto-detect .diffalyzer.yml, diffalyzer.yml, or config.yml)'
+            )
+            ->addOption(
+                'method-level',
+                'm',
+                InputOption::VALUE_NONE,
+                'Enable method-level granularity (default: enabled, use --file-level to disable)'
+            )
+            ->addOption(
+                'file-level',
+                null,
+                InputOption::VALUE_NONE,
+                'Use file-level granularity instead of method-level (less precise but faster)'
             );
     }
 
@@ -113,17 +117,18 @@ final class AnalyzeCommand extends Command
         }
 
         $outputFormat = $input->getOption('output');
-        if (!in_array($outputFormat, ['test', 'files'], true)) {
-            $output->writeln('<error>Invalid output format. Use: test or files</error>');
+        if (!in_array($outputFormat, ['phpunit', 'psalm', 'test'], true)) {
+            $output->writeln('<error>Invalid output format. Supported formats: phpunit, psalm</error>');
             return Command::FAILURE;
         }
 
-        $strategyName = $input->getOption('strategy');
-        $strategy = $this->createStrategy($strategyName);
-        if ($strategy === null) {
-            $output->writeln('<error>Invalid strategy. Use: conservative, moderate, or minimal</error>');
-            return Command::FAILURE;
+        // 'test' is deprecated but still supported for backward compatibility
+        if ($outputFormat === 'test') {
+            $outputFormat = 'phpunit';
         }
+
+        // Use unified strategy (Conservative strategy has all dependencies)
+        $strategy = new ConservativeStrategy();
 
         $from = $input->getOption('from');
         $to = $input->getOption('to');
@@ -135,6 +140,9 @@ final class AnalyzeCommand extends Command
         $showCacheStats = $input->getOption('cache-stats');
         $parallelWorkers = $input->getOption('parallel');
         $configPath = $input->getOption('config');
+        $fileLevel = $input->getOption('file-level');
+        // Method-level is default, unless --file-level is specified
+        $methodLevel = !$fileLevel;
         $verbose = $output->isVerbose();
 
         // Get stderr for verbose output (separate from stdout)
@@ -216,8 +224,11 @@ final class AnalyzeCommand extends Command
                 return Command::SUCCESS;
             }
 
-            $formatter = $this->createFormatter($outputFormat, $projectRoot, $testPattern);
+            // Get classToFileMap from analyzer for formatter
+            $classToFileMap = $analyzer->getClassToFileMap();
+            $formatter = $this->createFormatter($outputFormat, $projectRoot, $classToFileMap, $testPattern);
             $affectedFiles = [];
+            $affectedMethods = [];
 
             if ($shouldFullScan) {
                 $match = $fullScanMatcher->getLastMatch();
@@ -263,15 +274,142 @@ final class AnalyzeCommand extends Command
                 ));
             }
 
-            $affectedFiles = $analyzer->getAffectedFiles($changedFiles);
+            // Method-level or file-level analysis
+            if ($methodLevel) {
+                // Method-level granularity: only tests that call changed methods
+                if ($verbose) {
+                    $stderr->writeln('[diffalyzer] Using method-level granularity');
+                }
 
-            if ($verbose) {
-                $stderr->writeln(sprintf(
-                    '[diffalyzer] Found %d affected file(s)',
-                    count($affectedFiles)
-                ));
+                // Get changed methods
+                $methodDetectStart = microtime(true);
+                $changedMethods = $changeDetector->getChangedMethods($from, $to, $staged);
+                $methodDetectDuration = microtime(true) - $methodDetectStart;
+
+                if ($verbose) {
+                    $methodCount = array_sum(array_map('count', $changedMethods));
+                    $stderr->writeln(sprintf(
+                        '[diffalyzer] Detected %d changed method(s) in %d file(s) (%.2fs)',
+                        $methodCount,
+                        count($changedMethods),
+                        $methodDetectDuration
+                    ));
+                }
+
+                if (empty($changedMethods)) {
+                    if ($verbose) {
+                        $stderr->writeln('[diffalyzer] No method changes detected');
+                    }
+                    $output->write('');
+                    return Command::SUCCESS;
+                }
+
+                // Build method call graph
+                $methodGraphStart = microtime(true);
+                $analyzer->buildMethodCallGraph($allPhpFiles);
+                $methodGraphDuration = microtime(true) - $methodGraphStart;
+
+                if ($verbose) {
+                    $stderr->writeln(sprintf(
+                        '[diffalyzer] Built method call graph (%.2fs)',
+                        $methodGraphDuration
+                    ));
+                }
+
+                // Get affected methods
+                $allAffectedMethods = $analyzer->getAffectedMethods($changedMethods);
+
+                if ($verbose) {
+                    $stderr->writeln(sprintf(
+                        '[diffalyzer] Found %d affected method(s)',
+                        count($allAffectedMethods)
+                    ));
+                }
+
+                // For PHPUnit format: filter to test methods only
+                // For Psalm format: use all affected methods
+                if ($outputFormat === 'phpunit') {
+                    // Analyze test files
+                    $testAnalyzer = new TestMethodAnalyzer();
+                    $testFiles = array_filter($allPhpFiles, fn($f) => $testAnalyzer->isTestFile($f));
+
+                    $testAnalysisStart = microtime(true);
+                    $testAnalysis = $testAnalyzer->analyzeTestFiles($testFiles, $projectRoot);
+                    $testAnalysisDuration = microtime(true) - $testAnalysisStart;
+
+                    if ($verbose) {
+                        $stderr->writeln(sprintf(
+                            '[diffalyzer] Analyzed %d test file(s), found %d test method(s) (%.2fs)',
+                            count($testFiles),
+                            count($testAnalysis['testMethods']),
+                            $testAnalysisDuration
+                        ));
+                    }
+
+                    // Find relevant tests
+                    $relevantTestMethods = $testAnalyzer->findTestMethodsForAffectedMethods(
+                        $allAffectedMethods,
+                        $testAnalysis['testMethods']
+                    );
+
+                    if ($verbose) {
+                        $stderr->writeln(sprintf(
+                            '[diffalyzer] Found %d relevant test method(s)',
+                            count($relevantTestMethods)
+                        ));
+                    }
+
+                    // Store test methods for method-level output
+                    $affectedMethods = $relevantTestMethods;
+
+                    // Map back to files (for backward compatibility with file-level output)
+                    $affectedFiles = $testAnalyzer->mapTestMethodsToFiles(
+                        $relevantTestMethods,
+                        $testAnalysis['testFiles']
+                    );
+
+                    if ($verbose) {
+                        $stderr->writeln(sprintf(
+                            '[diffalyzer] Narrowed down to %d test file(s)',
+                            count($affectedFiles)
+                        ));
+                    }
+                } else {
+                    // For Psalm: use all affected methods
+                    $affectedMethods = $allAffectedMethods;
+
+                    // Map methods to files for file-level fallback
+                    $filesFromMethods = [];
+                    foreach ($affectedMethods as $method) {
+                        if (str_contains($method, '::')) {
+                            [$className] = explode('::', $method, 2);
+                            if (isset($classToFileMap[$className])) {
+                                $filesFromMethods[$classToFileMap[$className]] = true;
+                            }
+                        }
+                    }
+                    $affectedFiles = array_keys($filesFromMethods);
+
+                    if ($verbose) {
+                        $stderr->writeln(sprintf(
+                            '[diffalyzer] Mapped to %d affected file(s)',
+                            count($affectedFiles)
+                        ));
+                    }
+                }
+            } else {
+                // File-level granularity (original behavior)
+                $affectedFiles = $analyzer->getAffectedFiles($changedFiles);
+
+                if ($verbose) {
+                    $stderr->writeln(sprintf(
+                        '[diffalyzer] Found %d affected file(s)',
+                        count($affectedFiles)
+                    ));
+                }
             }
 
+            // Output affected files (method-level analysis already mapped to files above)
             $result = $formatter->format($affectedFiles, false);
             $output->write($result);
 
@@ -335,21 +473,16 @@ final class AnalyzeCommand extends Command
         }
     }
 
-    private function createStrategy(string $name): ?StrategyInterface
-    {
-        return match ($name) {
-            'conservative' => new ConservativeStrategy(),
-            'moderate' => new ModerateStrategy(),
-            'minimal' => new MinimalStrategy(),
-            default => null,
-        };
-    }
-
-    private function createFormatter(string $format, string $projectRoot, ?string $testPattern): FormatterInterface
-    {
+    private function createFormatter(
+        string $format,
+        string $projectRoot,
+        array $classToFileMap,
+        ?string $testPattern
+    ): FormatterInterface {
         return match ($format) {
-            'test' => new PhpUnitFormatter($projectRoot, $testPattern),
-            'files' => new DefaultFormatter(),
+            'phpunit' => new PhpUnitFormatter($projectRoot, $classToFileMap, $testPattern),
+            'psalm' => new PsalmFormatter($classToFileMap),
+            default => new PhpUnitFormatter($projectRoot, $classToFileMap, $testPattern),
         };
     }
 }

@@ -9,9 +9,12 @@ use Symfony\Component\Process\Process;
 
 final class ChangeDetector
 {
+    private readonly MethodChangeParser $methodParser;
+
     public function __construct(
         private readonly string $projectRoot
     ) {
+        $this->methodParser = new MethodChangeParser();
     }
 
     public function getChangedFiles(
@@ -44,6 +47,32 @@ final class ChangeDetector
         return explode("\n", $output);
     }
 
+    /**
+     * Get changed methods (method-level granularity)
+     *
+     * @return array<string, array<string>> File path => array of method names
+     */
+    public function getChangedMethods(
+        ?string $from = null,
+        ?string $to = null,
+        bool $staged = false
+    ): array {
+        $command = $this->buildGitDiffCommand($from, $to, $staged);
+        $process = new Process($command, $this->projectRoot);
+        $process->run();
+
+        if (!$process->isSuccessful()) {
+            throw new ProcessFailedException($process);
+        }
+
+        $output = $process->getOutput();
+        if (trim($output) === '') {
+            return [];
+        }
+
+        return $this->methodParser->parse($output);
+    }
+
     private function buildGitCommand(?string $from, ?string $to, bool $staged): array
     {
         if ($staged) {
@@ -59,5 +88,33 @@ final class ChangeDetector
         }
 
         return ['git', 'diff', 'HEAD', '--name-only', '--diff-filter=ACMR'];
+    }
+
+    /**
+     * Build git diff command with line-level context (for method detection)
+     */
+    private function buildGitDiffCommand(?string $from, ?string $to, bool $staged): array
+    {
+        // -U0 means 0 lines of context, only show changed lines
+        // This makes parsing faster and more precise
+        $baseCommand = ['git', 'diff', '-U0', '--diff-filter=ACMR'];
+
+        if ($staged) {
+            array_splice($baseCommand, 2, 0, ['--cached']);
+            return $baseCommand;
+        }
+
+        if ($from !== null && $to !== null) {
+            $baseCommand[] = "$from...$to";
+            return $baseCommand;
+        }
+
+        if ($from !== null) {
+            $baseCommand[] = $from;
+            return $baseCommand;
+        }
+
+        $baseCommand[] = 'HEAD';
+        return $baseCommand;
     }
 }

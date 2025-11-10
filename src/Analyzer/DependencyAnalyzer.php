@@ -8,6 +8,7 @@ use Diffalyzer\Cache\CacheInvalidator;
 use Diffalyzer\Cache\CacheManager;
 use Diffalyzer\Cache\FileHashRegistry;
 use Diffalyzer\Parser\AstBasedParser;
+use Diffalyzer\Parser\MethodCallExtractor;
 use Diffalyzer\Parser\ParserInterface;
 use Diffalyzer\Parser\TokenBasedParser;
 use Diffalyzer\Strategy\StrategyInterface;
@@ -18,6 +19,8 @@ final class DependencyAnalyzer
     private array $reverseDependencyGraph = [];
     private array $classToFileMap = [];
     private array $fileToClassesMap = []; // Reverse index: file => [class1, class2, ...] for O(1) cleanup
+    private array $methodCallGraph = []; // method => [called methods]
+    private array $reverseMethodCallGraph = []; // method => [methods that call it]
     private ?CacheManager $cacheManager = null;
     private ?FileHashRegistry $registry = null;
     private ?CacheInvalidator $invalidator = null;
@@ -25,6 +28,7 @@ final class DependencyAnalyzer
     private int $filesParsed = 0;
     private int $filesFromCache = 0;
     private ParserInterface $parser;
+    private MethodCallExtractor $methodExtractor;
 
     public function __construct(
         private readonly string $projectRoot,
@@ -33,6 +37,7 @@ final class DependencyAnalyzer
     ) {
         // Default to token-based parser for 5-10x speedup
         $this->parser = $this->createParser($parserType ?? 'token');
+        $this->methodExtractor = new MethodCallExtractor();
     }
 
     /**
@@ -253,6 +258,14 @@ final class DependencyAnalyzer
             }
 
             $dependencies = $this->strategy->extractDependenciesFromResult($result);
+
+            // Process include/require statements as file-to-file dependencies
+            $includes = $result->getIncludes();
+            if (!empty($includes)) {
+                $resolvedIncludes = $this->resolveIncludePaths($file, $includes);
+                $dependencies = array_merge($dependencies, $resolvedIncludes);
+            }
+
             $this->dependencyGraph[$file] = $dependencies;
 
             $this->filesParsed++;
@@ -365,5 +378,165 @@ final class DependencyAnalyzer
         }
 
         return $this->projectRoot . '/' . $file;
+    }
+
+    /**
+     * Resolve include/require paths relative to the source file
+     *
+     * @param string $sourceFile The file containing the include statement (project-relative)
+     * @param array $includePaths Array of file paths from include/require statements
+     * @return array Array of resolved project-relative file paths
+     */
+    private function resolveIncludePaths(string $sourceFile, array $includePaths): array
+    {
+        $resolved = [];
+        $sourceDir = dirname($this->getAbsolutePath($sourceFile));
+
+        foreach ($includePaths as $includePath) {
+            // Handle absolute paths
+            if (str_starts_with($includePath, '/')) {
+                // Convert to project-relative path
+                $relativePath = str_starts_with($includePath, $this->projectRoot)
+                    ? substr($includePath, strlen($this->projectRoot) + 1)
+                    : $includePath;
+                $resolved[] = $relativePath;
+                continue;
+            }
+
+            // Resolve relative paths relative to source file directory
+            $absoluteInclude = realpath($sourceDir . '/' . $includePath);
+            if ($absoluteInclude === false || !file_exists($absoluteInclude)) {
+                // Skip unresolvable paths (might be dynamic or missing)
+                continue;
+            }
+
+            // Convert to project-relative path
+            if (str_starts_with($absoluteInclude, $this->projectRoot)) {
+                $relativePath = substr($absoluteInclude, strlen($this->projectRoot) + 1);
+                $resolved[] = $relativePath;
+            }
+        }
+
+        return $resolved;
+    }
+
+    /**
+     * Build method call graph for method-level dependency tracking
+     */
+    public function buildMethodCallGraph(array $phpFiles): void
+    {
+        $this->methodCallGraph = [];
+
+        foreach ($phpFiles as $file) {
+            $absolutePath = $this->getAbsolutePath($file);
+            if (!file_exists($absolutePath)) {
+                continue;
+            }
+
+            $code = file_get_contents($absolutePath);
+            if ($code === false) {
+                continue;
+            }
+
+            $methodCalls = $this->methodExtractor->extract($code);
+            foreach ($methodCalls as $caller => $callees) {
+                if (!isset($this->methodCallGraph[$caller])) {
+                    $this->methodCallGraph[$caller] = [];
+                }
+                $this->methodCallGraph[$caller] = array_merge(
+                    $this->methodCallGraph[$caller],
+                    $callees
+                );
+            }
+        }
+
+        $this->buildReverseMethodCallGraph();
+    }
+
+    /**
+     * Build reverse method call graph (which methods call each method)
+     */
+    private function buildReverseMethodCallGraph(): void
+    {
+        $this->reverseMethodCallGraph = [];
+
+        foreach ($this->methodCallGraph as $caller => $callees) {
+            foreach ($callees as $callee) {
+                // Skip unresolved calls (like $var->method())
+                if (str_contains($callee, '$')) {
+                    continue;
+                }
+
+                if (!isset($this->reverseMethodCallGraph[$callee])) {
+                    $this->reverseMethodCallGraph[$callee] = [];
+                }
+
+                $this->reverseMethodCallGraph[$callee][] = $caller;
+            }
+        }
+    }
+
+    /**
+     * Get affected methods from changed methods
+     *
+     * @param array<string, array<string>> $changedMethods File => [method names]
+     * @return array<string> Fully qualified method names (Class::method)
+     */
+    public function getAffectedMethods(array $changedMethods): array
+    {
+        $affected = [];
+
+        // Convert file => methods to fully qualified method names
+        foreach ($changedMethods as $file => $methods) {
+            foreach ($methods as $method) {
+                $affected[$method] = true;
+                $this->collectAffectedMethodsRecursive($method, $affected);
+            }
+        }
+
+        return array_keys($affected);
+    }
+
+    /**
+     * Recursively collect methods affected by a changed method
+     */
+    private function collectAffectedMethodsRecursive(string $method, array &$affected): void
+    {
+        if (!isset($this->reverseMethodCallGraph[$method])) {
+            return;
+        }
+
+        foreach ($this->reverseMethodCallGraph[$method] as $caller) {
+            if (isset($affected[$caller])) {
+                continue;
+            }
+
+            $affected[$caller] = true;
+            $this->collectAffectedMethodsRecursive($caller, $affected);
+        }
+    }
+
+    /**
+     * Get the method call graph (for debugging/inspection)
+     */
+    public function getMethodCallGraph(): array
+    {
+        return $this->methodCallGraph;
+    }
+
+    /**
+     * Get the reverse method call graph (for debugging/inspection)
+     */
+    public function getReverseMethodCallGraph(): array
+    {
+        return $this->reverseMethodCallGraph;
+    }
+
+    /**
+     * Get the class to file mapping
+     */
+    public function getClassToFileMap(): array
+    {
+        return $this->classToFileMap;
     }
 }

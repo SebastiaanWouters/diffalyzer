@@ -19,6 +19,7 @@ final class DependencyVisitor extends NodeVisitorAbstract
     private array $staticCalls = [];
     private array $methodCalls = [];
     private array $declaredClasses = [];
+    private array $includes = [];
 
     public function enterNode(Node $node): null|int|Node
     {
@@ -102,6 +103,13 @@ final class DependencyVisitor extends NodeVisitorAbstract
             }
         }
 
+        if ($node instanceof Node\Expr\Include_) {
+            // Only track static string includes (not dynamic paths with variables)
+            if ($node->expr instanceof Node\Scalar\String_) {
+                $this->includes[$node->expr->value] = true;
+            }
+        }
+
         return null;
     }
 
@@ -143,6 +151,11 @@ final class DependencyVisitor extends NodeVisitorAbstract
     public function getDeclaredClasses(): array
     {
         return array_keys($this->declaredClasses);
+    }
+
+    public function getIncludes(): array
+    {
+        return array_keys($this->includes);
     }
 
     private function resolveName(Node\Name $name): string

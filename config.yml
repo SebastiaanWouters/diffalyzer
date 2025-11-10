@@ -7,6 +7,31 @@
 # 3. config.yml
 #
 # You can also specify a custom config file path with: --config path/to/config.yml
+#
+# Method-Level Granularity (Default)
+# -----------------------------------
+# Method-level granularity is ENABLED BY DEFAULT.
+# This mode tracks which specific methods changed and only outputs files containing affected methods.
+# This is more precise than file-level analysis - fewer files are output.
+# To disable and use file-level granularity, use --file-level flag.
+#
+# Output Formats:
+#   --output phpunit: Outputs affected test files only (default)
+#   --output psalm:   Outputs all affected files (for static analysis)
+#
+# How it works:
+# - Analyzes which methods changed
+# - Finds all methods that depend on those changes
+# - Outputs only the files containing affected methods
+#
+# Examples:
+#   bin/diffalyzer analyze --output phpunit  # test files with affected tests
+#   bin/diffalyzer analyze --output psalm    # all files with affected code
+#   bin/diffalyzer analyze --file-level      # file-level analysis (faster but less precise)
+#
+# Usage with tools:
+#   bin/diffalyzer analyze | xargs phpunit                    # Run affected tests
+#   bin/diffalyzer analyze --output=psalm | xargs psalm      # Analyze affected files
 
 # Full Scan Patterns
 # ------------------

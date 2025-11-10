@@ -19,7 +19,8 @@ final class ParseResult
         private readonly array $instantiations,
         private readonly array $staticCalls,
         private readonly array $methodCalls,
-        private readonly array $declaredClasses
+        private readonly array $declaredClasses,
+        private readonly array $includes = []
     ) {
     }
 
@@ -61,5 +62,10 @@ final class ParseResult
     public function getDeclaredClasses(): array
     {
         return $this->declaredClasses;
+    }
+
+    public function getIncludes(): array
+    {
+        return $this->includes;
     }
 }

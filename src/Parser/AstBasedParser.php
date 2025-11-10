@@ -47,7 +47,8 @@ final class AstBasedParser implements ParserInterface
                 instantiations: $visitor->getInstantiations(),
                 staticCalls: $visitor->getStaticCalls(),
                 methodCalls: $visitor->getMethodCalls(),
-                declaredClasses: $visitor->getDeclaredClasses()
+                declaredClasses: $visitor->getDeclaredClasses(),
+                includes: $visitor->getIncludes()
             );
         } catch (Error $error) {
             // Parse error - return empty result
@@ -65,7 +66,8 @@ final class AstBasedParser implements ParserInterface
             instantiations: [],
             staticCalls: [],
             methodCalls: [],
-            declaredClasses: []
+            declaredClasses: [],
+            includes: []
         );
     }
 }

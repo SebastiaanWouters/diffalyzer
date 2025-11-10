@@ -30,7 +30,8 @@ final class TokenBasedParser implements ParserInterface
             instantiations: $this->extractor->getInstantiations(),
             staticCalls: $this->extractor->getStaticCalls(),
             methodCalls: $this->extractor->getMethodCalls(),
-            declaredClasses: $this->extractor->getDeclaredClasses()
+            declaredClasses: $this->extractor->getDeclaredClasses(),
+            includes: $this->extractor->getIncludes()
         );
     }
 }

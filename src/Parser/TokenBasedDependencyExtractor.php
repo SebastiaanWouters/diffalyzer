@@ -23,6 +23,7 @@ final class TokenBasedDependencyExtractor
     private array $staticCalls = [];
     private array $methodCalls = [];
     private array $declaredClasses = [];
+    private array $includes = [];
 
     /**
      * Extract dependencies from PHP source code
@@ -54,6 +55,7 @@ final class TokenBasedDependencyExtractor
         $this->staticCalls = [];
         $this->methodCalls = [];
         $this->declaredClasses = [];
+        $this->includes = [];
     }
 
     /**
@@ -118,6 +120,13 @@ final class TokenBasedDependencyExtractor
                     if ($text === '$this' || preg_match('/^\$[a-zA-Z_]/', $text)) {
                         $this->methodCalls[$text] = true;
                     }
+                    break;
+
+                case T_INCLUDE:
+                case T_INCLUDE_ONCE:
+                case T_REQUIRE:
+                case T_REQUIRE_ONCE:
+                    $i = $this->extractInclude($tokens, $i);
                     break;
             }
         }
@@ -494,6 +503,66 @@ final class TokenBasedDependencyExtractor
     }
 
     /**
+     * Extract include/require statements
+     */
+    private function extractInclude(array $tokens, int $i): int
+    {
+        $i++; // Skip T_INCLUDE/T_REQUIRE/etc.
+        $filePath = null;
+
+        while ($i < count($tokens)) {
+            $token = $tokens[$i];
+
+            if (!is_array($token)) {
+                if ($token === ';') {
+                    break;
+                }
+                $i++;
+                continue;
+            }
+
+            [$type, $text] = $token;
+
+            // Look for string literals (static paths)
+            if ($type === T_CONSTANT_ENCAPSED_STRING) {
+                // Remove quotes from string literal
+                $filePath = trim($text, '\'"');
+                break;
+            }
+
+            // If we encounter a variable or concatenation, this is a dynamic include - skip it
+            if ($type === T_VARIABLE || $token === '.') {
+                // Dynamic include - can't reliably track at static analysis time
+                break;
+            }
+
+            if ($type !== T_WHITESPACE) {
+                // Stop on other unexpected tokens
+                break;
+            }
+
+            $i++;
+        }
+
+        if ($filePath !== null) {
+            // Store the included file path
+            // Note: We store relative paths as-is; resolution will happen in DependencyAnalyzer
+            $this->includes[$filePath] = true;
+        }
+
+        // Move to end of statement
+        while ($i < count($tokens)) {
+            $token = $tokens[$i];
+            if (!is_array($token) && $token === ';') {
+                break;
+            }
+            $i++;
+        }
+
+        return $i;
+    }
+
+    /**
      * Get the class name before T_DOUBLE_COLON for static calls
      */
     private function getPreviousClassName(array $tokens, int $i): ?string
@@ -608,5 +677,10 @@ final class TokenBasedDependencyExtractor
     public function getDeclaredClasses(): array
     {
         return array_keys($this->declaredClasses);
+    }
+
+    public function getIncludes(): array
+    {
+        return array_keys($this->includes);
     }
 }

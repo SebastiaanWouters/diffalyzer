@@ -59,7 +59,17 @@ final class ConservativeStrategy implements StrategyInterface
         foreach ($result->getStaticCalls() as $class) {
             $dependencies[$class] = true;
         }
+        // Note: includes are handled separately in DependencyAnalyzer
+        // as they require file path resolution
 
         return array_keys($dependencies);
+    }
+
+    /**
+     * Get raw include statements from ParseResult
+     */
+    public function extractIncludes(ParseResult $result): array
+    {
+        return $result->getIncludes();
     }
 }
