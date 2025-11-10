@@ -102,12 +102,22 @@ full_scan_patterns:
 
 **Via CLI flag (overrides config):**
 ```bash
-# Trigger full scan if any .yml file changes
+# Using regex patterns (must start with / or #)
 vendor/bin/diffalyzer --output test --full-scan-pattern '/.*\.yml$/'
-
-# Trigger full scan for config changes
 vendor/bin/diffalyzer --output test --full-scan-pattern '/^config\//'
+vendor/bin/diffalyzer --output test --full-scan-pattern '/phpunit\.xml/'
+
+# Using glob patterns (simpler, no / or # prefix needed)
+vendor/bin/diffalyzer --output test --full-scan-pattern '*.xml'
+vendor/bin/diffalyzer --output test --full-scan-pattern 'phpunit.xml'
+vendor/bin/diffalyzer --output test --full-scan-pattern 'config/**'
 ```
+
+**Note**: Always use `--verbose` to see:
+- Which pattern is being used
+- Which files changed
+- Whether the pattern matched any files
+- Whether full scan was triggered
 
 ## Integration Examples
 
@@ -160,7 +170,7 @@ vendor/bin/php-cs-fixer fix --dry-run $(vendor/bin/diffalyzer --output files)
 | `--from` | | Source ref for comparison (branch or commit hash) | |
 | `--to` | | Target ref for comparison (branch or commit hash) | `HEAD` |
 | `--staged` | | Only analyze staged files | `false` |
-| `--full-scan-pattern` | | Regex/glob pattern to trigger full scan (overrides config) | |
+| `--full-scan-pattern` | | Regex (e.g., `/\.xml$/`) or glob pattern (e.g., `*.xml`) to trigger full scan (overrides config) | |
 | `--config` | `-c` | Path to config file | Auto-detect |
 | `--verbose` | `-v` | Show detailed diagnostic information (outputs to stderr) | `false` |
 | `--test-pattern` | | Custom regex pattern to match test files | |
@@ -549,6 +559,61 @@ test:
 ```
 
 ## Troubleshooting
+
+### Full-scan pattern not working
+
+**Problem**: Using `--full-scan-pattern` but full scan is not triggered.
+
+**Solutions**:
+
+1. **Use `--verbose` to debug**: This will show you:
+   ```bash
+   vendor/bin/diffalyzer --output test --full-scan-pattern '/test\.xml/' --verbose
+   ```
+   - Which files actually changed
+   - Which pattern is being used
+   - Whether the pattern matched
+   - Whether full scan was triggered
+
+2. **Check pattern syntax**:
+   - **Regex patterns** must start with `/` or `#`: `/\.xml$/`, `/^config\//`
+   - **Glob patterns** don't need delimiters: `*.xml`, `phpunit.xml`, `config/**`
+   - When in doubt, use glob patterns (simpler and more intuitive)
+
+3. **Verify the pattern matches your changed files**:
+   ```bash
+   # First see what files changed
+   git status
+   git diff --name-only
+
+   # Then craft a pattern that matches them
+   # If you changed "phpunit.xml":
+   vendor/bin/diffalyzer --output test --full-scan-pattern 'phpunit.xml' --verbose
+   # or
+   vendor/bin/diffalyzer --output test --full-scan-pattern '/phpunit\.xml/' --verbose
+   ```
+
+4. **Common pattern examples**:
+   ```bash
+   # Match any XML file
+   --full-scan-pattern '*.xml'
+   --full-scan-pattern '/\.xml$/'
+
+   # Match specific file anywhere
+   --full-scan-pattern 'phpunit.xml'
+   --full-scan-pattern '/phpunit\.xml/'
+
+   # Match files in directory
+   --full-scan-pattern 'config/**'
+   --full-scan-pattern '/^config\//'
+
+   # Match multiple extensions (regex only)
+   --full-scan-pattern '/(\.xml|\.yml)$/'
+   ```
+
+5. **Pattern doesn't match subdirectories?**
+   - For glob: use `config/**` not `config/*` for recursive matching
+   - For regex: use `/^config\//` to match anything starting with `config/`
 
 ### No tests run but I made changes
 

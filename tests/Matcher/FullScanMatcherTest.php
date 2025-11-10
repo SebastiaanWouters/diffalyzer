@@ -111,4 +111,77 @@ final class FullScanMatcherTest extends TestCase
 
         $this->assertFalse($result);
     }
+
+    public function testGlobPatternViaCliParameter(): void
+    {
+        $changedFiles = ['phpunit.xml', 'src/User.php'];
+        $result = $this->matcher->shouldTriggerFullScan($changedFiles, '*.xml');
+
+        $this->assertTrue($result);
+    }
+
+    public function testGlobPatternDoesNotMatchWrongExtension(): void
+    {
+        $changedFiles = ['phpunit.xml', 'src/User.php'];
+        $result = $this->matcher->shouldTriggerFullScan($changedFiles, '*.yml');
+
+        $this->assertFalse($result);
+    }
+
+    public function testRegexPatternMatchesXmlFiles(): void
+    {
+        $changedFiles = ['phpunit.xml', 'config/test.xml', 'src/User.php'];
+        $result = $this->matcher->shouldTriggerFullScan($changedFiles, '/\.xml$/');
+
+        $this->assertTrue($result);
+    }
+
+    public function testRegexPatternMatchesSpecificFilename(): void
+    {
+        $changedFiles = ['phpunit.xml.dist', 'src/User.php'];
+        $result = $this->matcher->shouldTriggerFullScan($changedFiles, '/phpunit\.xml/');
+
+        $this->assertTrue($result);
+    }
+
+    public function testRegexPatternDoesNotMatchPartialString(): void
+    {
+        $changedFiles = ['phpunit.xml', 'src/User.php'];
+        $result = $this->matcher->shouldTriggerFullScan($changedFiles, '/test\.xml/');
+
+        $this->assertFalse($result);
+    }
+
+    public function testCliPatternOverridesConfigPatterns(): void
+    {
+        // Matcher with config patterns for composer files
+        $matcher = new FullScanMatcher(['composer.json', 'composer.lock']);
+
+        // CLI pattern should override and only match .xml files
+        $changedFiles = ['composer.json', 'phpunit.xml', 'src/User.php'];
+        $result = $matcher->shouldTriggerFullScan($changedFiles, '/\.xml$/');
+
+        // Should trigger because phpunit.xml matches, not because composer.json matches config
+        $this->assertTrue($result);
+        $this->assertEquals('phpunit.xml', $matcher->getLastMatch()['file']);
+        $this->assertEquals('/\.xml$/', $matcher->getLastMatch()['pattern']);
+    }
+
+    public function testGetLastMatchReturnsNullWhenNoMatch(): void
+    {
+        $changedFiles = ['src/User.php'];
+        $this->matcher->shouldTriggerFullScan($changedFiles, '/\.xml$/');
+
+        $this->assertNull($this->matcher->getLastMatch());
+    }
+
+    public function testGetLastMatchReturnsCorrectFileAndPattern(): void
+    {
+        $changedFiles = ['config/app.xml', 'src/User.php'];
+        $this->matcher->shouldTriggerFullScan($changedFiles, '/\.xml$/');
+
+        $match = $this->matcher->getLastMatch();
+        $this->assertEquals('config/app.xml', $match['file']);
+        $this->assertEquals('/\.xml$/', $match['pattern']);
+    }
 }

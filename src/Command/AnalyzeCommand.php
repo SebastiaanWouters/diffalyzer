@@ -155,9 +155,25 @@ final class AnalyzeCommand extends Command
             return Command::FAILURE;
         }
 
-        if ($fullScanPattern !== null && @preg_match($fullScanPattern, '') === false) {
-            $output->writeln('<error>Invalid regex pattern for --full-scan-pattern</error>');
-            return Command::FAILURE;
+        // Validate full-scan-pattern
+        if ($fullScanPattern !== null) {
+            // Check if it's a valid regex (starts with / or #) or glob pattern
+            $isRegexPattern = str_starts_with($fullScanPattern, '/') || str_starts_with($fullScanPattern, '#');
+
+            if ($isRegexPattern) {
+                // Validate regex syntax
+                if (@preg_match($fullScanPattern, '') === false) {
+                    $output->writeln('<error>Invalid regex pattern for --full-scan-pattern: "' . $fullScanPattern . '"</error>');
+                    $output->writeln('<info>Regex patterns must start with / or # and have valid syntax.</info>');
+                    $output->writeln('<info>Examples: /\.xml$/ or /^config\//</info>');
+                    return Command::FAILURE;
+                }
+            } else {
+                // It's a glob pattern - provide helpful feedback
+                if ($verbose) {
+                    $stderr->writeln('[diffalyzer] Using glob pattern for full-scan: "' . $fullScanPattern . '"');
+                }
+            }
         }
 
         if ($testPattern !== null && @preg_match($testPattern, '') === false) {
@@ -174,7 +190,9 @@ final class AnalyzeCommand extends Command
             $configPatterns = $config['full_scan_patterns'];
 
             if ($verbose) {
-                if ($configPatterns !== null) {
+                if ($fullScanPattern !== null) {
+                    $stderr->writeln('[diffalyzer] Using CLI full-scan pattern (overrides config): "' . $fullScanPattern . '"');
+                } elseif ($configPatterns !== null) {
                     if (empty($configPatterns)) {
                         $stderr->writeln('[diffalyzer] Full-scan patterns disabled via config (empty array)');
                     } else {
@@ -211,10 +229,21 @@ final class AnalyzeCommand extends Command
                     '[diffalyzer] Detected %d changed file(s)',
                     count($allChangedFiles)
                 ));
+                if (!empty($allChangedFiles)) {
+                    foreach ($allChangedFiles as $file) {
+                        $stderr->writeln('  - ' . $file);
+                    }
+                }
             }
 
             $fullScanMatcher = new FullScanMatcher($configPatterns);
             $shouldFullScan = $fullScanMatcher->shouldTriggerFullScan($allChangedFiles, $fullScanPattern);
+
+            // Provide helpful feedback if CLI pattern was provided but didn't match
+            if ($verbose && $fullScanPattern !== null && !$shouldFullScan && !empty($allChangedFiles)) {
+                $stderr->writeln('[diffalyzer] Warning: CLI pattern "' . $fullScanPattern . '" did not match any changed files');
+                $stderr->writeln('[diffalyzer] Full scan was NOT triggered. Proceeding with partial analysis.');
+            }
 
             $changedFiles = array_filter($allChangedFiles, fn(string $file): bool => str_ends_with($file, '.php'));
 
