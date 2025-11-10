@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2025-11-10
+
+### Fixed
+- **Critical bug**: Changed files were missing from Psalm/PHPStan output when using method-level granularity
+  - Files containing changed methods are now always included in the affected files output
+  - Fixed issue where `classToFileMap` was empty, causing class name resolution to fail
+  - Moved `getClassToFileMap()` call to after `buildDependencyGraph()` when the map is populated
+
+- **Critical bug**: PHPUnit output showed 0 tests even when relevant tests existed
+  - Short class names from `MethodChangeParser` are now correctly mapped to fully qualified names
+  - Added cascading test matching strategy: direct method calls → class-level matching → namespace matching
+  - Implemented `findTestMethodsForClasses()` to find tests calling any method on changed classes
+  - Implemented `findTestMethodsByNamespace()` as fallback using path/namespace heuristics
+
+### Added
+- **Smart test discovery**: Three-level cascading approach for finding relevant tests:
+  1. Direct method call matching (most precise)
+  2. Class-level matching (tests using any method on changed classes)
+  3. Namespace/directory matching (tests in same bundle/namespace as changed files)
+- New helper method `mapShortNamesToFQN()` to convert short class names to fully qualified names
+- New helper method `extractClassesFromMethods()` to extract class names from method signatures
+
+### Changed
+- Psalm/PHPStan formatters now always use file-level output (method-level output not meaningful for static analyzers)
+- PHPUnit formatter only uses method-level output when appropriate (test discovery)
+- Improved verbose output showing the test matching strategy used
+- Better diagnostic messages when falling back through test matching strategies
+
+### Improved
+- Test discovery is now more robust and finds tests even when they don't directly call changed methods
+- Reduced false negatives where relevant tests were not detected
+- Better handling of projects with namespace-based directory structures
+
 ## [1.6.2] - 2025-11-10
 
 ### Improved

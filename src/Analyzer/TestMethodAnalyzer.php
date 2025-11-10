@@ -120,6 +120,91 @@ final class TestMethodAnalyzer
     }
 
     /**
+     * Find test methods that call any method on the specified classes
+     *
+     * This is a broader match than findTestMethodsForAffectedMethods - useful when
+     * a method changes but no tests directly call that specific method.
+     *
+     * @param array<string> $classes Fully qualified class names
+     * @param array<string, array<string>> $testMethods Test method => [called methods]
+     * @return array<string> Test method names that should be run
+     */
+    public function findTestMethodsForClasses(
+        array $classes,
+        array $testMethods
+    ): array {
+        $relevantTests = [];
+
+        foreach ($testMethods as $testMethod => $calledMethods) {
+            foreach ($calledMethods as $calledMethod) {
+                // Check if the called method belongs to any of the changed classes
+                if (str_contains($calledMethod, '::')) {
+                    [$calledClass] = explode('::', $calledMethod, 2);
+                    if (in_array($calledClass, $classes, true)) {
+                        $relevantTests[] = $testMethod;
+                        break; // This test is relevant, move to next test
+                    }
+                }
+            }
+        }
+
+        return $relevantTests;
+    }
+
+    /**
+     * Find test methods based on file path/namespace similarity
+     *
+     * This is a heuristic fallback: if src/Kuleuven/ModelBundle/Entity/Country.php changes,
+     * we should run tests in tests/.../ModelBundle/.../
+     *
+     * @param array<string> $changedFiles Relative file paths that changed
+     * @param array<string, array<string>> $testMethods Test method => [called methods]
+     * @return array<string> Test method names that should be run
+     */
+    public function findTestMethodsByNamespace(array $changedFiles, array $testMethods): array
+    {
+        $relevantTests = [];
+
+        foreach ($changedFiles as $changedFile) {
+            // Extract meaningful path components (e.g., "ModelBundle", "Entity")
+            // Skip common prefixes like "src/"
+            $pathParts = array_filter(
+                explode('/', $changedFile),
+                fn($part) => !in_array($part, ['src', 'lib', 'app', 'tests'], true)
+            );
+
+            // Look for test methods whose file paths contain these components
+            foreach ($testMethods as $testMethod => $calls) {
+                // Get the test method's class name
+                if (!str_contains($testMethod, '::')) {
+                    continue;
+                }
+
+                [$testClass] = explode('::', $testMethod, 2);
+
+                // Convert class name to path-like string for matching
+                // E.g., Kuleuven\ModelBundle\Tests\EntityTest -> Kuleuven/ModelBundle/Tests/EntityTest
+                $testPath = str_replace('\\', '/', $testClass);
+
+                // Check if any significant path components match
+                $matchCount = 0;
+                foreach ($pathParts as $part) {
+                    if (stripos($testPath, $part) !== false) {
+                        $matchCount++;
+                    }
+                }
+
+                // If we match at least 2 components (e.g., "ModelBundle" + "Entity"), include the test
+                if ($matchCount >= 2) {
+                    $relevantTests[] = $testMethod;
+                }
+            }
+        }
+
+        return array_unique($relevantTests);
+    }
+
+    /**
      * Map test methods back to test files
      *
      * @param array<string> $testMethods Test method names

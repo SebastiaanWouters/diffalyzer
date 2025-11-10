@@ -255,9 +255,6 @@ final class AnalyzeCommand extends Command
                 return Command::SUCCESS;
             }
 
-            // Get classToFileMap from analyzer for formatter
-            $classToFileMap = $analyzer->getClassToFileMap();
-            $formatter = $this->createFormatter($outputFormat, $projectRoot, $classToFileMap, $testPattern);
             $affectedFiles = [];
             $affectedMethods = [];
 
@@ -270,6 +267,8 @@ final class AnalyzeCommand extends Command
                         $match['pattern']
                     ));
                 }
+                // For full scan, we need a formatter but don't need classToFileMap populated
+                $formatter = $this->createFormatter($outputFormat, $projectRoot, [], $testPattern);
                 $output->write($formatter->format([], true));
                 return Command::SUCCESS;
             }
@@ -304,6 +303,10 @@ final class AnalyzeCommand extends Command
                     $parseDuration
                 ));
             }
+
+            // Get classToFileMap AFTER building dependency graph (it's populated during build)
+            $classToFileMap = $analyzer->getClassToFileMap();
+            $formatter = $this->createFormatter($outputFormat, $projectRoot, $classToFileMap, $testPattern);
 
             // Method-level or file-level analysis
             if ($methodLevel) {
@@ -383,6 +386,40 @@ final class AnalyzeCommand extends Command
                         $testAnalysis['testMethods']
                     );
 
+                    // If no tests directly call the changed methods, fall back to finding tests
+                    // that use the changed classes (broader matching)
+                    if (empty($relevantTestMethods) && !empty($changedMethods)) {
+                        // Extract short class names from changed methods
+                        $shortClassNames = $this->extractClassesFromMethods(array_merge(...array_values($changedMethods)));
+
+                        // Map short class names to fully qualified names
+                        $changedClasses = $this->mapShortNamesToFQN($shortClassNames, $classToFileMap);
+
+                        if ($verbose) {
+                            $stderr->writeln(sprintf(
+                                '[diffalyzer] No direct method callers found, using class-level matching (%d class(es))',
+                                count($changedClasses)
+                            ));
+                        }
+
+                        $relevantTestMethods = $testAnalyzer->findTestMethodsForClasses(
+                            $changedClasses,
+                            $testAnalysis['testMethods']
+                        );
+
+                        // If still no tests found, fall back to namespace/directory matching
+                        if (empty($relevantTestMethods)) {
+                            if ($verbose) {
+                                $stderr->writeln('[diffalyzer] No class-level matches, using namespace/directory matching');
+                            }
+
+                            $relevantTestMethods = $testAnalyzer->findTestMethodsByNamespace(
+                                array_keys($changedMethods),
+                                $testAnalysis['testMethods']
+                            );
+                        }
+                    }
+
                     if ($verbose) {
                         $stderr->writeln(sprintf(
                             '[diffalyzer] Found %d relevant test method(s)',
@@ -406,11 +443,21 @@ final class AnalyzeCommand extends Command
                         ));
                     }
                 } else {
-                    // For Psalm: use all affected methods
+                    // For Psalm/PHPStan: use all affected methods
                     $affectedMethods = $allAffectedMethods;
 
                     // Map methods to files for file-level fallback
                     $filesFromMethods = [];
+
+                    // First, ALWAYS include the originally changed files themselves
+                    // (these files have changed methods and should always be in the output)
+                    foreach ($changedMethods as $file => $methods) {
+                        if (!empty($methods)) {
+                            $filesFromMethods[$file] = true;
+                        }
+                    }
+
+                    // Then, add files with methods that are affected (methods that call the changed methods)
                     foreach ($affectedMethods as $method) {
                         if (str_contains($method, '::')) {
                             [$className] = explode('::', $method, 2);
@@ -422,9 +469,13 @@ final class AnalyzeCommand extends Command
                     $affectedFiles = array_keys($filesFromMethods);
 
                     if ($verbose) {
+                        $changedFileCount = count(array_intersect_key($filesFromMethods, $changedMethods));
+                        $dependentFileCount = count($affectedFiles) - $changedFileCount;
                         $stderr->writeln(sprintf(
-                            '[diffalyzer] Mapped to %d affected file(s)',
-                            count($affectedFiles)
+                            '[diffalyzer] Mapped to %d affected file(s) (%d changed + %d dependent)',
+                            count($affectedFiles),
+                            $changedFileCount,
+                            $dependentFileCount
                         ));
                     }
                 }
@@ -441,7 +492,9 @@ final class AnalyzeCommand extends Command
             }
 
             // Output affected methods or files depending on formatter capability and analysis mode
-            if ($methodLevel && $formatter instanceof MethodAwareFormatterInterface && !empty($affectedMethods)) {
+            // For PHPUnit: use method-level output if available (allows running specific test methods)
+            // For Psalm/PHPStan: use file-level output (static analyzers work on whole files)
+            if ($methodLevel && $outputFormat === 'phpunit' && $formatter instanceof MethodAwareFormatterInterface && !empty($affectedMethods)) {
                 $result = $formatter->formatMethods($affectedMethods, false);
             } else {
                 $result = $formatter->format($affectedFiles, false);
@@ -534,5 +587,57 @@ final class AnalyzeCommand extends Command
             'phpstan' => new PhpStanFormatter($classToFileMap),
             default => new PhpUnitFormatter($projectRoot, $classToFileMap, $testPattern),
         };
+    }
+
+    /**
+     * Extract class names from fully qualified method names
+     *
+     * @param array<string> $methods Method names like "Namespace\Class::method" or "Class::method"
+     * @return array<string> Class names like "Namespace\Class" or "Class"
+     */
+    private function extractClassesFromMethods(array $methods): array
+    {
+        $classes = [];
+        foreach ($methods as $method) {
+            if (str_contains($method, '::')) {
+                [$className] = explode('::', $method, 2);
+                $classes[] = $className;
+            }
+        }
+        return array_unique($classes);
+    }
+
+    /**
+     * Map short class names to fully qualified names
+     *
+     * @param array<string> $shortNames Short class names like "Country", "Command"
+     * @param array<string, string> $classToFileMap FQN => file path map
+     * @return array<string> Fully qualified class names
+     */
+    private function mapShortNamesToFQN(array $shortNames, array $classToFileMap): array
+    {
+        $fqnList = [];
+
+        foreach ($shortNames as $shortName) {
+            // If it's already a fully qualified name (contains \), use it as is
+            if (str_contains($shortName, '\\')) {
+                $fqnList[] = $shortName;
+                continue;
+            }
+
+            // Search for matching fully qualified names
+            foreach (array_keys($classToFileMap) as $fqn) {
+                // Get the short name from the FQN (last part after last \)
+                $fqnShortName = str_contains($fqn, '\\')
+                    ? substr($fqn, strrpos($fqn, '\\') + 1)
+                    : $fqn;
+
+                if ($fqnShortName === $shortName) {
+                    $fqnList[] = $fqn;
+                }
+            }
+        }
+
+        return array_unique($fqnList);
     }
 }
