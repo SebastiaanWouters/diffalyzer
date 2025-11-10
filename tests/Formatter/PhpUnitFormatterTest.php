@@ -256,4 +256,122 @@ final class PhpUnitFormatterTest extends TestCase
         $this->assertStringNotContainsString('bootstrap.php', $result);
         $this->assertStringNotContainsString('_bootstrap.php', $result);
     }
+
+    public function testSingleFileWithMethod(): void
+    {
+        $files = ['tests/UserTest.php::testLogin'];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php --filter testLogin', $result);
+    }
+
+    public function testMultipleFilesWithMethods(): void
+    {
+        $files = [
+            'tests/UserTest.php::testLogin',
+            'tests/FooTest.php::testBar'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php tests/FooTest.php --filter \'/testLogin|testBar/\'', $result);
+    }
+
+    public function testSameFileWithMultipleMethods(): void
+    {
+        $files = [
+            'tests/UserTest.php::testLogin',
+            'tests/UserTest.php::testLogout'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php --filter \'/testLogin|testLogout/\'', $result);
+    }
+
+    public function testMixedFilesWithAndWithoutMethods(): void
+    {
+        $files = [
+            'tests/UserTest.php::testLogin',
+            'tests/FooTest.php',
+            'tests/BarTest.php'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php tests/FooTest.php tests/BarTest.php --filter testLogin', $result);
+    }
+
+    public function testFileWithEmptyMethodName(): void
+    {
+        $files = ['tests/UserTest.php::'];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php', $result);
+    }
+
+    public function testMethodNameWithSpecialRegexCharacters(): void
+    {
+        $files = ['tests/UserTest.php::testSomething[data-set]'];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php --filter testSomething\[data\-set\]', $result);
+    }
+
+    public function testMultipleMethodsWithSpecialCharacters(): void
+    {
+        $files = [
+            'tests/UserTest.php::test(foo)',
+            'tests/UserTest.php::test[bar]'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php --filter \'/test\(foo\)|test\[bar\]/\'', $result);
+    }
+
+    public function testMethodSyntaxWithNonTestFile(): void
+    {
+        $files = [
+            'src/User.php::someMethod',
+            'tests/UserTest.php::testLogin'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $this->assertSame('tests/UserTest.php --filter testLogin', $result);
+    }
+
+    public function testFullScanIgnoresMethodSyntax(): void
+    {
+        $files = [
+            'tests/UserTest.php::testLogin',
+            'tests/FooTest.php::testBar'
+        ];
+        $result = $this->formatter->format($files, true);
+
+        $this->assertSame('', $result);
+    }
+
+    public function testDeduplicationOfSameFileWithDifferentMethods(): void
+    {
+        $files = [
+            'tests/UserTest.php::testLogin',
+            'tests/UserTest.php::testLogout',
+            'tests/UserTest.php::testRegister'
+        ];
+        $result = $this->formatter->format($files, false);
+
+        $fileCount = substr_count($result, 'tests/UserTest.php');
+        $this->assertSame(1, $fileCount);
+        $this->assertStringContainsString('--filter \'/testLogin|testLogout|testRegister/\'', $result);
+    }
+
+    public function testMethodSyntaxWithCustomTestPattern(): void
+    {
+        $formatter = new PhpUnitFormatter('/project/root', [], '/Spec\.php$/');
+        $files = [
+            'spec/UserSpec.php::testUserCreation',
+            'tests/UserTest.php::testLogin'
+        ];
+        $result = $formatter->format($files, false);
+
+        $this->assertSame('spec/UserSpec.php --filter testUserCreation', $result);
+        $this->assertStringNotContainsString('tests/UserTest.php', $result);
+    }
 }

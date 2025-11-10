@@ -22,7 +22,44 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
         // Filter to only test files
         $testFiles = array_filter($files, fn(string $file): bool => $this->isTestFile($file));
 
-        return implode(' ', $testFiles);
+        return $this->buildPhpUnitCommand($testFiles);
+    }
+
+    private function buildPhpUnitCommand(array $testFiles): string
+    {
+        if (empty($testFiles)) {
+            return '';
+        }
+
+        $filePaths = [];
+        $methods = [];
+
+        foreach ($testFiles as $file) {
+            if (str_contains($file, '::')) {
+                [$filePath, $methodName] = explode('::', $file, 2);
+
+                if (!empty($methodName)) {
+                    $filePaths[$filePath] = true;
+                    $methods[] = preg_quote($methodName, '/');
+                } else {
+                    $filePaths[$filePath] = true;
+                }
+            } else {
+                $filePaths[$file] = true;
+            }
+        }
+
+        $output = implode(' ', array_keys($filePaths));
+
+        if (!empty($methods)) {
+            if (count($methods) === 1) {
+                $output .= ' --filter ' . reset($methods);
+            } else {
+                $output .= ' --filter \'/' . implode('|', $methods) . '/\'';
+            }
+        }
+
+        return $output;
     }
 
     public function formatMethods(array $methods, bool $fullScan): string
@@ -69,33 +106,33 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
 
     private function isTestFile(string $file): bool
     {
+        $filePath = str_contains($file, '::') ? explode('::', $file, 2)[0] : $file;
+
         if ($this->testPattern !== null) {
-            return preg_match($this->testPattern, $file) === 1;
+            return preg_match($this->testPattern, $filePath) === 1;
         }
 
-        // Exclude common non-test files
         $excludePatterns = [
-            '/[Ff]ixtures?/',      // Fixtures/fixtures/DataFixtures
-            '/_support/',           // Codeception support files
-            '/bootstrap\.php$/',    // Bootstrap files
-            '/_bootstrap\.php$/',   // Alternative bootstrap files
-            '/TestCase\.php$/',     // Base test case classes
-            '/AbstractTest/',       // Abstract test classes
-            '/TestHelper\.php$/',   // Test helper files
-            '/helpers?/',           // Helper directories
+            '/[Ff]ixtures?/',
+            '/_support/',
+            '/bootstrap\.php$/',
+            '/_bootstrap\.php$/',
+            '/TestCase\.php$/',
+            '/AbstractTest/',
+            '/TestHelper\.php$/',
+            '/helpers?/',
         ];
 
         foreach ($excludePatterns as $pattern) {
-            if (preg_match($pattern, $file) === 1) {
+            if (preg_match($pattern, $filePath) === 1) {
                 return false;
             }
         }
 
-        // Must match test patterns
-        return str_contains($file, 'Test.php') ||
-               str_starts_with($file, 'tests/') ||
-               str_starts_with($file, 'test/') ||
-               str_starts_with($file, 'Tests/') ||
-               str_starts_with($file, 'Test/');
+        return str_contains($filePath, 'Test.php') ||
+               str_starts_with($filePath, 'tests/') ||
+               str_starts_with($filePath, 'test/') ||
+               str_starts_with($filePath, 'Tests/') ||
+               str_starts_with($filePath, 'Test/');
     }
 }

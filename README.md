@@ -129,6 +129,15 @@ vendor/bin/phpunit $(vendor/bin/diffalyzer --output test)
 
 # With configuration
 vendor/bin/phpunit -c phpunit.xml $(vendor/bin/diffalyzer --output test)
+
+# Run specific test methods using :: syntax
+# Note: Pass file paths with :: to diffalyzer's output
+vendor/bin/phpunit tests/UserTest.php::testLogin
+# Diffalyzer automatically converts this to: tests/UserTest.php --filter testLogin
+
+# Multiple test methods from different files
+vendor/bin/phpunit tests/UserTest.php::testLogin tests/FooTest.php::testBar
+# Converts to: tests/UserTest.php tests/FooTest.php --filter '/testLogin|testBar/'
 ```
 
 ### Psalm
@@ -307,6 +316,15 @@ Outputs **space-separated test file paths** that are affected by the changes.
 
 **How it works:**
 The tool uses AST-based dependency analysis to find ALL test files that import or use the affected classes. It does NOT assume file naming conventions or directory structures.
+
+**Test Method Filtering (New in v1.2.0):**
+Diffalyzer now supports the `::` syntax for specifying individual test methods. When you pass file paths with `::methodName`, diffalyzer automatically converts them to PHPUnit's `--filter` syntax:
+
+- **Single method**: `tests/UserTest.php::testLogin` → `tests/UserTest.php --filter testLogin`
+- **Multiple methods**: `tests/UserTest.php::testLogin tests/FooTest.php::testBar` → `tests/UserTest.php tests/FooTest.php --filter '/testLogin|testBar/'`
+- **Same file, multiple methods**: `tests/UserTest.php::testLogin tests/UserTest.php::testLogout` → `tests/UserTest.php --filter '/testLogin|testLogout/'`
+
+This provides an intuitive, framework-agnostic syntax for running specific test methods without needing to remember PHPUnit's `--filter` syntax.
 
 **Examples:**
 
