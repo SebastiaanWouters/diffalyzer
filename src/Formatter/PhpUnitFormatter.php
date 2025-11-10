@@ -68,45 +68,58 @@ final class PhpUnitFormatter implements MethodAwareFormatterInterface
             return '';
         }
 
-        // Collect unique files for all affected methods
-        $files = [];
+        // Collect unique test class names from the affected methods
+        $testClasses = [];
         foreach ($methods as $method) {
-            $file = $this->methodToFile($method);
-            if ($file !== null) {
-                $files[$file] = true;
+            $className = $this->extractClassName($method);
+            if ($className !== null && $this->isTestClass($className)) {
+                // Extract just the class name (without namespace) for the filter
+                $parts = explode('\\', $className);
+                $shortName = end($parts);
+                $testClasses[$shortName] = true;
             }
         }
 
-        if (empty($files)) {
+        if (empty($testClasses)) {
             return '';
         }
 
-        // Return just the file paths (method-level filtering would require
-        // running PHPUnit separately for each file, which is not practical)
-        return implode(' ', array_keys($files));
+        $classNames = array_keys($testClasses);
+
+        // Use --filter with class names (backward compatible with PHPUnit 9+)
+        // This avoids the issue where PHPUnit 9 doesn't support multiple file arguments
+        if (count($classNames) === 1) {
+            return '--filter ' . reset($classNames);
+        }
+
+        return '--filter \'/' . implode('|', $classNames) . '/\'';
     }
 
     /**
-     * Convert fully qualified method name to file path only
+     * Extract class name from fully qualified method name
      *
      * @param string $fqMethodName e.g., "App\Tests\UserTest::testLogin"
-     * @return string|null e.g., "tests/UserTest.php" or null if not resolvable
+     * @return string|null e.g., "App\Tests\UserTest" or null if not parseable
      */
-    private function methodToFile(string $fqMethodName): ?string
+    private function extractClassName(string $fqMethodName): ?string
     {
-        // Split class::method
         if (!str_contains($fqMethodName, '::')) {
             return null;
         }
 
         [$className, $_] = explode('::', $fqMethodName, 2);
+        return $className;
+    }
 
-        // Look up file for class
-        if (!isset($this->classToFileMap[$className])) {
-            return null;
-        }
-
-        return $this->classToFileMap[$className];
+    /**
+     * Check if a class name appears to be a test class
+     *
+     * @param string $className Fully qualified class name
+     * @return bool True if it looks like a test class
+     */
+    private function isTestClass(string $className): bool
+    {
+        return str_contains($className, 'Test');
     }
 
     /**

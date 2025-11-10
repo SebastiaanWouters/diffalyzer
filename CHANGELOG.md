@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.4] - 2025-11-10
+
+### Fixed
+- **Critical bug**: PHPUnit 9 compatibility - output was incompatible with PHPUnit 9.x
+  - v1.7.3 output multiple file paths (e.g., `tests/FileA.php tests/FileB.php`)
+  - PHPUnit 9 doesn't support multiple file arguments - only runs the first file
+  - PHPUnit 10+ added support for multiple file arguments
+  - Now uses `--filter` with test class names instead: `--filter '/UserTest|FooTest|BarTest/'`
+  - This format is backward compatible with PHPUnit 9+ and works across all versions
+  - All affected test classes will run, which is the intended behavior
+
 ## [1.7.3] - 2025-11-10
 
 ### Fixed
